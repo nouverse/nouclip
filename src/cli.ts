@@ -1,0 +1,172 @@
+#!/usr/bin/env node
+import { autoCommand } from '@/commands/auto';
+import { cropCommand } from '@/commands/crop';
+import { cutCommand } from '@/commands/cut';
+import { downloadCommand } from '@/commands/download';
+import { extractCommand } from '@/commands/extract';
+import { highlightCommand } from '@/commands/highlight';
+import { infoCommand } from '@/commands/info';
+import { listCommand } from '@/commands/list';
+import { subtitleCommand } from '@/commands/subtitle';
+import { transcriptCommand } from '@/commands/transcript';
+import { Command } from 'commander';
+
+const program = new Command();
+
+program
+  .name('nouclip')
+  .description('Agentic video clipper, aspect ratio reframer & kinetic subtitle engine')
+  .version('0.2.0');
+
+// 1. Storage & Context Introspection Commands
+program
+  .command('info')
+  .alias('paths')
+  .description('Display workspace paths, stored asset counts, storage size, and service config')
+  .option('--json', 'Output results as JSON payload')
+  .action(infoCommand);
+
+program
+  .command('list [type]')
+  .alias('ls')
+  .description(
+    'List stored assets (types: "downloads", "transcripts", "segments", "output", "all")'
+  )
+  .option('--json', 'Output list as JSON payload')
+  .action(listCommand);
+
+// 2. End-to-End Pipeline
+program
+  .command('auto <videoOrUrl>')
+  .description(
+    'End-to-end automated clipping: download -> cut range -> aspect reframing -> Whisper -> kinetic subtitles'
+  )
+  .option('-r, --range <range>', 'Time range e.g. "13:25-14:50", "01:20..02:15", "45-75"')
+  .option('-s, --start <time>', 'Start timestamp e.g. "13:25", "01:13:25", "85s"')
+  .option('--from <time>', 'Alias for --start')
+  .option('-e, --end <time>', 'End timestamp e.g. "14:50", "01:15:00"')
+  .option('--to <time>', 'Alias for --end')
+  .option('-d, --duration <time>', 'Duration e.g. "30s", "1m", "45"')
+  .option(
+    '-a, --aspect <ratio>',
+    'Aspect ratio e.g. "9:16", "1:1", "4:5", "16:9" (default: "9:16")',
+    '9:16'
+  )
+  .option(
+    '-m, --mode <mode>',
+    'Framing style: "blur" (blurred background), "center" (crop fill), "pad" (letterbox), "stretch" (default: "center")',
+    'center'
+  )
+  .option('--blur', 'Shortcut for --mode blur (blurred background letterbox)')
+  .option('-l, --lang <lang>', "Language for Whisper transcription (default: 'id')", 'id')
+  .option('--font-size <size>', 'Subtitle font size (default: 60)', '60')
+  .option(
+    '--draft',
+    'Generate segment, audio, and subtitle files but pause before burning for review'
+  )
+  .option('--no-burn', 'Alias for --draft')
+  .option('-o, --output <path>', 'Output video path')
+  .option('--download-dir <dir>', 'Custom directory to store downloaded videos')
+  .option('--output-dir <dir>', 'Custom directory to store final videos')
+  .option('--keep-temp', 'Keep intermediate wav/temp files')
+  .action(autoCommand);
+
+// 3. Modular Operations
+program
+  .command('download <url>')
+  .description('Download video or section from YouTube via yt-dlp with caching support')
+  .option('-s, --start <time>', 'Start timestamp')
+  .option('-e, --end <time>', 'End timestamp')
+  .option('-o, --output <filename>', 'Output filename template')
+  .option('--dir <directory>', 'Output download directory')
+  .option('--force', 'Force re-download even if already cached')
+  .action(downloadCommand);
+
+program
+  .command('cut <video>')
+  .description('Cut video segment by timestamp range without re-encoding (or with re-encode)')
+  .option('-r, --range <range>', 'Time range e.g. "13:25-14:50", "80-110"')
+  .option('-s, --start <time>', 'Start time e.g. "13:25", "85s"')
+  .option('--from <time>', 'Alias for --start')
+  .option('-e, --end <time>', 'End time e.g. "14:50"')
+  .option('--to <time>', 'Alias for --end')
+  .option('-d, --duration <time>', 'Duration e.g. "30s", "45"')
+  .option('-o, --output <path>', 'Output MP4 path')
+  .option('--reencode', 'Re-encode video with libx264 (default: false fast copy)')
+  .action(cutCommand);
+
+program
+  .command('crop <video>')
+  .alias('reframe')
+  .description('Reframe video aspect ratio (9:16, 1:1, 4:5, 16:9) with blur, center, or pad modes')
+  .option(
+    '-a, --aspect <ratio>',
+    'Target aspect ratio e.g. "9:16", "1:1", "4:5", "16:9" (default: "9:16")',
+    '9:16'
+  )
+  .option(
+    '-m, --mode <mode>',
+    'Framing style: "blur" (blurred background), "center" (crop), "pad" (letterbox), "stretch"',
+    'center'
+  )
+  .option('--blur', 'Shortcut for --mode blur')
+  .option('-o, --output <path>', 'Output MP4 path')
+  .action(cropCommand);
+
+program
+  .command('extract <video>')
+  .description('Extract audio from video and run Whisper to generate word timestamps JSON')
+  .option('-l, --lang <lang>', "Transcription language (default: 'id')", 'id')
+  .option('-m, --model <model>', "Whisper model name (default: 'large-v3')", 'large-v3')
+  .option('-o, --output <path>', 'Output JSON path')
+  .action(extractCommand);
+
+program
+  .command('transcript <videoOrJson>')
+  .description('Export clean formatted transcript to TXT, SRT, VTT, or JSON')
+  .option(
+    '-f, --format <format>',
+    "Export format: 'txt', 'srt', 'vtt', 'json' (default: 'txt')",
+    'txt'
+  )
+  .option('-l, --lang <lang>', "Transcription language (default: 'id')", 'id')
+  .option('-o, --output <path>', 'Output file path')
+  .action(transcriptCommand);
+
+program
+  .command('subtitle <video>')
+  .description('Burn animated kinetic subtitles into video from .ass file or .json word timestamps')
+  .option('-s, --sub <path>', 'Path to .ass subtitle file or .json word timestamps')
+  .option('-t, --timestamps <json>', 'Path to Whisper word timestamps JSON (alias for --sub)')
+  .option('--font-size <size>', 'Font size (default: 60)', '60')
+  .option('--primary-color <hex>', 'Inactive text color (default: &H00FFFFFF&)')
+  .option('--highlight-color <hex>', 'Active animated word color (default: &H0000FFFF&)')
+  .option('-o, --output <path>', 'Output MP4 path')
+  .action(subtitleCommand);
+
+program
+  .command('highlight <videoOrJson>')
+  .description(
+    'Optional: Analyze transcript to suggest clip timestamps using any OpenAI-compatible LLM'
+  )
+  .option('-k, --keyword <keyword>', 'Focus highlight search on specific keyword / topic')
+  .option(
+    '-m, --max-clips <count>',
+    'Maximum number of highlight clips to generate (default: 5)',
+    '5'
+  )
+  .option('--min-duration <seconds>', 'Minimum clip duration in seconds (default: 25)', '25')
+  .option('--max-duration <seconds>', 'Maximum clip duration in seconds (default: 60)', '60')
+  .option(
+    '--base-url <url>',
+    'OpenAI-compatible Base URL (e.g. https://api.openai.com/v1, http://localhost:11434/v1)'
+  )
+  .option('--api-key <key>', 'LLM API Key')
+  .option(
+    '--model <model>',
+    "LLM model name (e.g. 'gpt-4o-mini', 'llama-3.3-70b-versatile', 'llama3.2')"
+  )
+  .option('-o, --output <path>', 'Output highlights JSON path')
+  .action(highlightCommand);
+
+program.parse(process.argv);

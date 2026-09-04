@@ -1,0 +1,96 @@
+name: Release & Distribute Packages
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Distribute NouClip Packages
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout NouClip Code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun Runtime
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js Runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Run Quality Gates
+        run: |
+          bun run typecheck
+          bun run lint
+
+      - name: Compile Standalone Cross-Platform Binaries & Node Bundle
+        run: |
+          bun run build:all
+
+      - name: Package Debian (.deb)
+        run: |
+          mkdir -p deb-pkg/DEBIAN deb-pkg/usr/local/bin
+          cat << 'EOF' > deb-pkg/DEBIAN/control
+          Package: nouclip
+          Version: 0.1.1
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Nouverse Technologies <admin@nouverse.tech>
+          Description: High-performance AI video clipper & auto-shorts generator
+          Depends: ffmpeg
+          EOF
+          cp dist/nouclip-linux-x64 deb-pkg/usr/local/bin/nouclip
+          chmod 755 deb-pkg/usr/local/bin/nouclip
+          dpkg-deb --build --root-owner-group deb-pkg dist/nouclip_amd64.deb
+
+      - name: Publish to NPM
+        run: npm publish --access public || true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish GitHub Release (Tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/nouclip-linux-x64
+            dist/nouclip-darwin-arm64
+            dist/nouclip-darwin-x64
+            dist/nouclip-windows-x64.exe
+            dist/nouclip_amd64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Rolling Latest Release (Main Branch)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "NouClip Latest Build"
+          prerelease: false
+          files: |
+            dist/nouclip-linux-x64
+            dist/nouclip-darwin-arm64
+            dist/nouclip-darwin-x64
+            dist/nouclip-windows-x64.exe
+            dist/nouclip_amd64.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
