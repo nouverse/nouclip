@@ -284,42 +284,41 @@ nouclip transcript <videoOrJson> [options]
 
 ## ⚙️ Environment Variables & Agent E2E Setup
 
-NouClip automatically loads configuration from `~/.nouclip/.env` (global) and `./.env` (local directory). Existing environment variables take precedence.
+NouClip automatically loads configuration from `~/.nouclip/.env` (global) and `./.env` (local directory). Existing shell environment variables take precedence.
 
-### Quick E2E Setup for Agents
-If setting up a fresh environment for NouClip, create the configuration file:
+### Minimal vs Optional Configuration
+- **REQUIRED:** Only `NOUCLIP_OPENAI_AUDIO_URL` must be configured (pointing to your Whisper STT endpoint).
+- **OPTIONAL:** Everything else works out-of-the-box using sensible defaults!
+  - `NOUCLIP_OPENAI_AUDIO_API_KEY` is **optional** (leave blank for local Whisper compute).
+  - All storage paths default cleanly to `~/.nouclip/`.
+  - LLM variables are **optional** (only used when extracting viral moments via LLM heuristics).
+  - Binaries (`ffmpeg`, `ffprobe`, `yt-dlp`) are auto-detected from system `$PATH`.
 
+### Quick Minimal Setup (Local Voice Compute)
 ```bash
 mkdir -p ~/.nouclip
 cat << 'EOF' > ~/.nouclip/.env
-# Whisper STT Engine (Local Voice Compute or Remote OpenAI/Groq)
+# Required: Endpoint for Whisper STT
 NOUCLIP_OPENAI_AUDIO_URL=http://localhost:8880
-NOUCLIP_OPENAI_AUDIO_API_KEY=
-NOUCLIP_OPENAI_AUDIO_MODEL=large-v3
-
-# Optional LLM Analysis Engine
-NOUCLIP_OPENAI_LLM_URL=https://api.openai.com/v1
-NOUCLIP_OPENAI_LLM_API_KEY=your_openai_api_key
-NOUCLIP_OPENAI_LLM_MODEL=gpt-4o-mini
 EOF
 ```
 
 ### Complete Environment Variables Reference Table
 
-| Variable Name | Fallback Key | Default Value | Description |
-|---|---|---|---|
-| `NOUCLIP_WORKSPACE_DIR` | - | `~/.nouclip` | Root workspace for all cached artifacts & logs |
-| `NOUCLIP_DOWNLOAD_DIR` | - | `~/.nouclip/downloads` | Storage directory for downloaded videos |
-| `NOUCLIP_TRANSCRIPT_DIR` | - | `~/.nouclip/transcripts` | Storage for Whisper JSON & ASS subtitle scripts |
-| `NOUCLIP_SEGMENT_DIR` | - | `~/.nouclip/segments` | Storage for cropped segments & reframed intermediate MP4s |
-| `NOUCLIP_OUTPUT_DIR` | - | `~/.nouclip/output` | Destination for final rendered videos |
-| `NOUCLIP_OPENAI_AUDIO_URL` | `OPENAI_AUDIO_URL` | `http://localhost:8880` | Endpoint for Whisper STT `/v1/audio/transcriptions` |
-| `NOUCLIP_OPENAI_AUDIO_API_KEY` | `OPENAI_AUDIO_API_KEY` | *(empty)* | Bearer token / API key for Whisper endpoint |
-| `NOUCLIP_OPENAI_AUDIO_MODEL` | `OPENAI_AUDIO_MODEL` | `large-v3` | Whisper model name |
-| `NOUCLIP_OPENAI_LLM_URL` | `OPENAI_LLM_URL` | `https://api.openai.com/v1` | OpenAI-compatible endpoint for moment analysis |
-| `NOUCLIP_OPENAI_LLM_API_KEY` | `OPENAI_LLM_API_KEY` | *(empty)* | API key for LLM endpoint |
-| `NOUCLIP_OPENAI_LLM_MODEL` | `OPENAI_LLM_MODEL` | `gpt-4o-mini` | LLM model for heuristic moment extraction |
-| `NOUCLIP_FFMPEG_PATH` | `FFMPEG_PATH` | `ffmpeg` on PATH | Custom path to FFmpeg binary |
-| `NOUCLIP_FFPROBE_PATH` | `FFPROBE_PATH` | `ffprobe` on PATH | Custom path to FFprobe binary |
-| `NOUCLIP_YTDLP_PATH` | `YTDLP_PATH` | `yt-dlp` on PATH | Custom path to yt-dlp binary |
+| Variable Name | Fallback Key | Requirement | Default Value | Description |
+|---|---|---|---|---|
+| `NOUCLIP_OPENAI_AUDIO_URL` | `OPENAI_AUDIO_URL` | **REQUIRED** | `http://localhost:8880` | Whisper STT endpoint (local or remote OpenAI/Groq) |
+| `NOUCLIP_OPENAI_AUDIO_API_KEY` | `OPENAI_AUDIO_API_KEY` | **Optional** | *(empty)* | API Key for audio endpoint (not required for local compute) |
+| `NOUCLIP_OPENAI_AUDIO_MODEL` | `OPENAI_AUDIO_MODEL` | **Optional** | `large-v3` | Whisper model identifier |
+| `NOUCLIP_WORKSPACE_DIR` | - | **Optional** | `~/.nouclip` | Root workspace directory for all artifacts & caches |
+| `NOUCLIP_DOWNLOAD_DIR` | - | **Optional** | `~/.nouclip/downloads` | Storage directory for cached downloaded videos |
+| `NOUCLIP_TRANSCRIPT_DIR` | - | **Optional** | `~/.nouclip/transcripts` | Storage for Whisper JSON & ASS subtitle scripts |
+| `NOUCLIP_SEGMENT_DIR` | - | **Optional** | `~/.nouclip/segments` | Storage for cropped segments & reframed MP4s |
+| `NOUCLIP_OUTPUT_DIR` | - | **Optional** | `~/.nouclip/output` | Destination for final rendered videos |
+| `NOUCLIP_OPENAI_LLM_URL` | `OPENAI_LLM_URL` | **Optional** | `https://api.openai.com/v1` | OpenAI-compatible endpoint for moment analysis |
+| `NOUCLIP_OPENAI_LLM_API_KEY` | `OPENAI_LLM_API_KEY` | **Optional** | *(empty)* | API key for LLM analysis |
+| `NOUCLIP_OPENAI_LLM_MODEL` | `OPENAI_LLM_MODEL` | **Optional** | `gpt-4o-mini` | LLM model name for moment heuristics |
+| `NOUCLIP_FFMPEG_PATH` | `FFMPEG_PATH` | **Optional** | `ffmpeg` on PATH | Custom path to FFmpeg binary |
+| `NOUCLIP_FFPROBE_PATH` | `FFPROBE_PATH` | **Optional** | `ffprobe` on PATH | Custom path to FFprobe binary |
+| `NOUCLIP_YTDLP_PATH` | `YTDLP_PATH` | **Optional** | `yt-dlp` on PATH | Custom path to yt-dlp binary |
 
