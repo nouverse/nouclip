@@ -253,6 +253,42 @@ nouclip subtitle input.mp4 --sub captions.ass --bgm music.mp3 --bgm-volume 0.10 
 
 ---
 
+## 🤖 Let Your AI Agent Use the CLI
+
+NouClip is designed from the ground up to be **agentic-first**. AI coding assistants and autonomous agents (such as [Nouride](https://github.com/nouverse/nouride), Claude Code, Cursor, Cline, OpenClaw, etc.) can inspect storage, reuse cached artifacts, and execute multi-step clipping pipelines deterministically using structured JSON outputs and the bundled skill.
+
+### 📦 Bundled Agent Skill
+
+A comprehensive, production-ready skill file is maintained directly inside the repository at **[`skills/nouclip/SKILL.md`](./skills/nouclip/SKILL.md)**.
+
+### 🛠️ Installing the Skill into Your AI Agent
+
+#### 1. For Nouride / OpenClaw Daemons
+Copy the skill folder into your agent's shared or personal skills directory:
+```bash
+# Copy to Nouride shared skills
+cp -r skills/nouclip ~/.nouride/agents/shared/skills/
+# Or copy to a specific agent's workspace
+cp -r skills/nouclip ~/.nouride/agents/<agent-id>/skills/
+```
+
+#### 2. For Cursor / Claude Code / Cline / Windsurf
+Copy the skill instructions into your project's rules or prompt directory:
+```bash
+# Cursor Rules
+mkdir -p .cursor/rules && cp skills/nouclip/SKILL.md .cursor/rules/nouclip.md
+
+# Claude Code / Cline Instructions
+mkdir -p .claude && cp skills/nouclip/SKILL.md .claude/nouclip-skill.md
+```
+
+### 💡 Why Agents Love NouClip:
+- **Introspection:** `nouclip info --json` gives the agent total visibility into disk usage, configured endpoints, and workspace directories.
+- **Discovery:** `nouclip list <downloads|transcripts|segments|output> --json` returns structured arrays of existing assets so agents never re-download or re-transcribe unnecessarily.
+- **Safety & Drafts:** The `--draft` / `--no-burn` flag allows agents to review, correct typos, or adjust ASS subtitle scripts before committing to a full video render.
+
+---
+
 ## 🧪 Testing & CI
 
 NouClip comes with an extensive unit and E2E test suite running across macOS, Linux, and Windows:
