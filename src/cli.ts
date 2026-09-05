@@ -16,7 +16,7 @@ const program = new Command();
 program
   .name('nouclip')
   .description('Agentic video clipper, aspect ratio reframer & kinetic subtitle engine')
-  .version('0.2.0');
+  .version('0.2026.9.5');
 
 // 1. Storage & Context Introspection Commands
 program
