@@ -52,9 +52,9 @@ Run `nouclip info` anytime to inspect current paths, file counts, and storage us
 
 ## 📥 Installation
 
-### Method 1: Standalone Binaries (Recommended)
+### Method 1: Standalone Binaries (Pre-compiled)
 
-Download the pre-compiled binary for your operating system from the **[GitHub Releases](https://github.com/nouverse/nouclip/releases)** page:
+Download the pre-compiled standalone binary (zero runtime dependencies required) for your operating system from the **[GitHub Releases](https://github.com/nouverse/nouclip/releases)** page:
 
 | Platform | Architecture | Binary |
 |---|---|---|
@@ -65,7 +65,29 @@ Download the pre-compiled binary for your operating system from the **[GitHub Re
 
 ---
 
-### Method 2: One-Line Install Script (Linux / macOS)
+### Method 2: Package Managers (Bun / npm / pnpm)
+
+> **💡 Recommended if you already have Bun or Node.js installed on your machine.** You can install NouClip globally or run it instantly without manual downloads:
+
+```bash
+# Using Bun (Fastest)
+bun add -g nouclip
+
+# Using npm
+npm install -g nouclip
+
+# Using pnpm
+pnpm add -g nouclip
+
+# Or run instantly without installing:
+bunx nouclip --help
+# or
+npx nouclip --help
+```
+
+---
+
+### Method 3: One-Line Install Script (Linux / macOS)
 
 Downloads the latest release binary for your architecture and places it into `/usr/local/bin`:
 
@@ -75,7 +97,7 @@ curl -fsSL https://raw.githubusercontent.com/nouverse/nouclip/main/install.sh | 
 
 ---
 
-### Method 3: From Source (Bun)
+### Method 4: From Source (Development)
 
 ```bash
 git clone https://github.com/nouverse/nouclip.git
