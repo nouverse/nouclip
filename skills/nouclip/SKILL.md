@@ -199,85 +199,122 @@ nouclip subtitle ~/.nouclip/segments/video_framed_9x16_blur.mp4 \
 
 ## 🛠️ CLI Command Reference
 
-### 1. `auto` — End-to-End Pipeline
+### 1. `info` / `paths` — Storage & Service Introspection
+```bash
+nouclip info [options]
+  --json                    Output results as clean JSON payload
+```
+
+### 2. `list` / `ls` — Stored Artifacts Discovery
+```bash
+nouclip list [type] [options]
+  [type]                    Asset category: "downloads", "transcripts", "segments", "output", "all"
+  --json                    Output asset list as clean JSON payload
+```
+
+### 3. `auto` — End-to-End Automated Pipeline
 ```bash
 nouclip auto <videoOrUrl> [options]
-  -r, --range <range>       Time range e.g. "13:25-14:50"
-  -s, --start, --from <t>   Start timestamp
-  -e, --end, --to <t>       End timestamp
-  -d, --duration <t>        Duration
-  -a, --aspect <ratio>      Target aspect ratio (default: "9:16")
-  -m, --mode <mode>         Framing mode: blur, center, pad, stretch
-  --blur                    Shortcut for --mode blur
-  --no-subtitles            Do not generate or burn subtitles (clean reframed video only)
+  -r, --range <range>       Time range e.g. "13:25-14:50", "01:20..02:15", "45-75"
+  -s, --start, --from <t>   Start timestamp e.g. "13:25", "01:13:25", "85s"
+  -e, --end, --to <t>       End timestamp e.g. "14:50", "01:15:00"
+  -d, --duration <time>     Duration e.g. "30s", "1m", "45"
+  -a, --aspect <ratio>      Target aspect ratio: "9:16", "1:1", "4:5", "16:9" (default: "9:16")
+  -m, --mode <mode>         Framing style: "blur", "center", "pad", "stretch" (default: "blur")
+  --blur                    Shortcut for --mode blur (blurred background letterbox)
+  --center                  Shortcut for --mode center (crop fill)
+  --no-subtitles, --no-subs Do not generate or burn subtitles (clean reframed video only)
   -l, --lang <lang>         Whisper language (default: "id")
-  --style <preset>          Subtitle style preset: "default", "hormozi", "storyteller", "cinematic"
+  --style <preset>          Typography style: "default", "hormozi", "storyteller", "cinematic"
   --font-size <size>        Subtitle font size (default: 60)
-  --silence-trim            Auto-trim silent pauses (>0.6s) between words
+  --silence-trim            Auto-trim silent pauses (>0.6s) between words for rapid pacing
   --silence-gap <seconds>   Silence threshold in seconds before trimming (default: 0.6)
   --bgm <path>              Background music track to mix with sidechain ducking
-  --bgm-volume <volume>     BGM audio volume factor (default: 0.10)
-  --no-ducking              Disable sidechain audio ducking
-  --draft, --no-burn        Pause before burning for subtitle review
+  --bgm-volume <volume>     BGM volume factor (default: 0.10)
+  --no-ducking              Disable sidechain audio ducking (constant volume BGM)
+  --draft, --no-burn        Pause before burning for subtitle review (MANDATORY FOR AGENTS)
   -o, --output <path>       Output video path
+  --download-dir <dir>      Custom directory to store downloaded videos
+  --output-dir <dir>        Custom directory to store final videos
+  --keep-temp               Keep intermediate WAV and temporary files
 ```
 
-### 2. `subtitle` — Burn Subtitles & Audio Mixing
-```bash
-nouclip subtitle <video> [options]
-  --sub <assPath>           ASS subtitle file to burn
-  --style <preset>          Subtitle typography style preset
-  --font-size <size>        Subtitle font size (default: 60)
-  --bgm <path>              Background music track
-  --bgm-volume <volume>     BGM audio volume factor (default: 0.10)
-  --no-ducking              Disable sidechain audio ducking
-  -o, --output <path>       Output MP4 path
-```
-
-### 3. `download` — YouTube Downloader & Caching
+### 4. `download` — YouTube Downloader & Caching
 ```bash
 nouclip download <url> [options]
-  -s, --start <time>        Start timestamp
-  -e, --end <time>          End timestamp
+  -s, --start <time>        Start timestamp e.g. "13:25", "85s"
+  -e, --end <time>          End timestamp e.g. "14:50"
   -o, --output <filename>   Output filename template
-  --dir <directory>         Download destination directory
+  --dir <directory>         Output download directory
   --force                   Force re-download even if already cached
 ```
 
-### 4. `cut` — Fast Video Segment Clipping
+### 5. `cut` — Fast Video Segment Clipping
 ```bash
 nouclip cut <video> [options]
-  -r, --range <range>       Time range e.g. "13:25-14:50"
+  -r, --range <range>       Time range e.g. "13:25-14:50", "80-110"
   -s, --start, --from <t>   Start timestamp
   -e, --end, --to <t>       End timestamp
-  -d, --duration <t>        Duration
+  -d, --duration <time>     Duration e.g. "30s", "45"
   -o, --output <path>       Output MP4 path
-  --reencode                Re-encode video with libx264 (default: false)
+  --reencode                Re-encode video with libx264 (default: false fast stream copy)
 ```
 
-### 5. `crop` / `reframe` — Aspect Ratio Converter
+### 6. `crop` / `reframe` — Aspect Ratio Converter
 ```bash
 nouclip crop <video> [options]
-  -a, --aspect <ratio>      Target aspect ratio (9:16, 1:1, 4:5, 16:9)
-  -m, --mode <mode>         Framing style: blur, center, pad, stretch
+  -a, --aspect <ratio>      Target aspect ratio: "9:16", "1:1", "4:5", "16:9" (default: "9:16")
+  -m, --mode <mode>         Framing style: "blur", "center", "pad", "stretch" (default: "blur")
   --blur                    Shortcut for --mode blur
+  --center                  Shortcut for --mode center (crop fill)
   -o, --output <path>       Output MP4 path
 ```
 
-### 6. `extract` — Audio & Whisper Transcription
+### 7. `extract` — Audio & Whisper Transcription
 ```bash
 nouclip extract <video> [options]
-  -l, --lang <lang>         Language (default: "id")
-  -m, --model <model>       Model name (default: "large-v3")
+  -r, --range <range>       Limit extraction to range e.g. "13:25-14:50"
+  -s, --start, --from <t>   Start timestamp
+  -e, --end, --to <t>       End timestamp
+  -d, --duration <time>     Duration
+  -l, --lang <lang>         Language for Whisper transcription (default: "id")
+  -m, --model <model>       Whisper model name (default: "large-v3")
+  --keep-wav                Keep the intermediate 16kHz mono WAV file
   -o, --output <path>       Output JSON path (default: ~/.nouclip/transcripts/)
 ```
 
-### 7. `transcript` — Format Converter
+### 8. `transcript` — Format Converter
 ```bash
 nouclip transcript <videoOrJson> [options]
-  -f, --format <format>     Export format: txt, srt, vtt, json (default: txt)
-  -l, --lang <lang>         Language (default: "id")
+  -f, --format <format>     Export format: "txt", "srt", "vtt", "json" (default: "txt")
+  -l, --lang <lang>         Transcription language (default: "id")
   -o, --output <path>       Output file path
+```
+
+### 9. `subtitle` — Animated Subtitle Burner & Audio Mixing
+```bash
+nouclip subtitle <video> [options]
+  -s, --sub <path>          Path to .ass subtitle file or .json word timestamps
+  -t, --timestamps <json>   Path to Whisper word timestamps JSON (alias for --sub)
+  --style <preset>          Subtitle style: "default", "hormozi", "storyteller", "cinematic"
+  --font-size <size>        Subtitle font size (default: 60)
+  --primary-color <hex>     Inactive text color (default: &H00FFFFFF&)
+  --highlight-color <hex>   Active animated word color (default: &H0000FFFF&)
+  --bgm <path>              Background music track to mix with sidechain ducking
+  --bgm-volume <volume>     BGM audio volume factor (default: 0.10)
+  --no-ducking              Disable sidechain audio ducking (constant volume BGM)
+  -o, --output <path>       Output MP4 path
+```
+
+### 10. `highlight` — AI Moments Discovery (Optional LLM Heuristics)
+```bash
+nouclip highlight <videoOrJson> [options]
+  -k, --keyword <keyword>   Focus highlight search on a specific topic / keyword
+  -m, --max-clips <count>   Maximum number of highlight clips to generate (default: 5)
+  --min-duration <sec>      Minimum clip duration in seconds (default: 25)
+  --max-duration <sec>      Maximum clip duration in seconds (default: 60)
+  --budget <seconds>        Total duration target across all clips (default: 180)
+  -o, --output <path>       Output JSON file to save suggested highlight clips
 ```
 
 ---
