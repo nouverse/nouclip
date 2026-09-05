@@ -6,6 +6,7 @@ import { FFmpegRunner, type FramingMode } from '@/core/ffmpeg';
 import { WhisperClient } from '@/core/whisper';
 import { YouTubeDownloader } from '@/core/youtube';
 import { logger } from '@/utils/logger';
+import { resolveMediaInput } from '@/utils/path';
 import { formatSecondsToTimestamp, parseRange, parseTimestamp } from '@/utils/time';
 
 export interface AutoCommandOptions {
@@ -42,9 +43,9 @@ export async function autoCommand(videoPathOrUrl: string, options: AutoCommandOp
     const outDir = options.downloadDir ? resolve(options.downloadDir) : config.downloadDir;
     input = await YouTubeDownloader.download(videoPathOrUrl, { outputDir: outDir });
   } else {
-    input = resolve(videoPathOrUrl);
+    input = resolveMediaInput(videoPathOrUrl);
     if (!existsSync(input)) {
-      logger.error(`Video file not found: ${input}`);
+      logger.error(`Video file not found: ${videoPathOrUrl} (Checked: ${input})`);
       process.exit(1);
     }
   }

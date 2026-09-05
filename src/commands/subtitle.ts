@@ -4,6 +4,7 @@ import { ASSGenerator, type WordTimestamp } from '@/core/ass';
 import { config } from '@/core/config';
 import { FFmpegRunner } from '@/core/ffmpeg';
 import { logger } from '@/utils/logger';
+import { resolveMediaInput } from '@/utils/path';
 
 export async function subtitleCommand(
   videoPath: string,
@@ -17,9 +18,9 @@ export async function subtitleCommand(
   }
 ) {
   config.ensureDirs();
-  const input = resolve(videoPath);
+  const input = resolveMediaInput(videoPath);
   if (!existsSync(input)) {
-    logger.error(`Video file not found: ${input}`);
+    logger.error(`Video file not found: ${videoPath} (Checked: ${input})`);
     process.exit(1);
   }
 
@@ -31,9 +32,9 @@ export async function subtitleCommand(
     process.exit(1);
   }
 
-  const subPath = resolve(subInput);
+  const subPath = resolveMediaInput(subInput);
   if (!existsSync(subPath)) {
-    logger.error(`Subtitle file not found: ${subPath}`);
+    logger.error(`Subtitle file not found: ${subInput} (Checked: ${subPath})`);
     process.exit(1);
   }
 
