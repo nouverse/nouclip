@@ -54,25 +54,12 @@ Run `nouclip info` anytime to inspect current paths, file counts, and storage us
 
 > 💡 **Don't know how to setup?** You can let your AI agent install and configure everything autonomously! Jump to [Let Your AI Agent Setup & Use the CLI](#-let-your-ai-agent-use-the-cli).
 
-### Method 1: Standalone Binaries (Pre-compiled)
+### Method 1: Package Managers (Bun / npm / pnpm) — Recommended
 
-Download the pre-compiled standalone binary (zero runtime dependencies required) for your operating system from the **[GitHub Releases](https://github.com/nouverse/nouclip/releases)** page:
-
-| Platform | Architecture | Binary |
-|---|---|---|
-| 🐧 Linux | x86_64 | `nouclip-linux-x64` |
-| 🍎 macOS | Apple Silicon (M1/M2/M3/M4) | `nouclip-darwin-arm64` |
-| 🍏 macOS | Intel (x86_64) | `nouclip-darwin-x64` |
-| 🪟 Windows | x86_64 | `nouclip-windows-x64.exe` |
-
----
-
-### Method 2: Package Managers (Bun / npm / pnpm)
-
-> **💡 Recommended if you already have Bun or Node.js installed on your machine.** You can install NouClip globally or run it instantly without manual downloads:
+The easiest and fastest way to install and update NouClip globally across all platforms:
 
 ```bash
-# Using Bun (Fastest)
+# Using Bun (Recommended & Fastest)
 bun add -g nouclip
 
 # Using npm
@@ -86,6 +73,19 @@ bunx nouclip --help
 # or
 npx nouclip --help
 ```
+
+---
+
+### Method 2: Standalone Binaries (Pre-compiled)
+
+If you do not have Bun or Node.js installed, download the pre-compiled standalone binary (zero runtime dependencies required) for your operating system from the **[GitHub Releases](https://github.com/nouverse/nouclip/releases)** page:
+
+| Platform | Architecture | Binary |
+|---|---|---|
+| 🐧 Linux | x86_64 | `nouclip-linux-x64` |
+| 🍎 macOS | Apple Silicon (M1/M2/M3/M4) | `nouclip-darwin-arm64` |
+| 🍏 macOS | Intel (x86_64) | `nouclip-darwin-x64` |
+| 🪟 Windows | x86_64 | `nouclip-windows-x64.exe` |
 
 ---
 

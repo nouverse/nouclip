@@ -20,7 +20,8 @@ nouclip --version
 
 If `nouclip` is **not found** (`command not found` or `ENOENT`), install it using one of the following methods:
 
-- **Option A (Package Managers — if Bun or Node/npm is present):**
+- **Option A (Package Managers — Recommended & Fastest):**
+  Check if `bun`, `npm`, or `pnpm` is available on the machine:
   ```bash
   # Using Bun (Fastest)
   bun add -g nouclip
