@@ -116,7 +116,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     return `${header + lines.join('\n')}\n`;
   }
 
-  private static formatTime(seconds: number): string {
+  static formatTime(seconds: number): string {
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);

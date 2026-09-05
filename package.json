@@ -15,6 +15,7 @@
   ],
   "scripts": {
     "dev": "bun run src/cli.ts",
+    "test": "bun test tests",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src",
     "format": "biome format --write src",

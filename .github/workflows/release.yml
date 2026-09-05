@@ -35,6 +35,7 @@ jobs:
         run: |
           bun run typecheck
           bun run lint
+          bun test
 
       - name: Compile Standalone Cross-Platform Binaries & Node Bundle
         run: |

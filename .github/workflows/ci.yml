@@ -26,7 +26,8 @@ jobs:
       - name: Install Dependencies
         run: bun install
 
-      - name: Run Quality Checks
+      - name: Run Quality Checks & Unit Tests
         run: |
           bun run typecheck
           bun run lint
+          bun test
