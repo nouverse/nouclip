@@ -71,7 +71,6 @@ export class FFmpegRunner {
         if (clean.includes(':')) {
           const [w, h] = clean.split(':').map(Number);
           if (w && h && !Number.isNaN(w) && !Number.isNaN(h)) {
-            // Normalize to 1080 base
             if (w < h) {
               const targetW = 1080;
               const targetH = Math.round((1080 * h) / w / 2) * 2;
@@ -143,22 +142,31 @@ export class FFmpegRunner {
   static async extractAudio(
     videoPath: string,
     outputPath: string,
-    sampleRate = 16000
+    options: { sampleRate?: number; start?: number; duration?: number } = {}
   ): Promise<void> {
     const ffmpeg = FFmpegRunner.getFFmpegPath();
-    const args = [
-      '-y',
-      '-i',
-      videoPath,
+    const args = ['-y'];
+
+    if (options.start !== undefined) {
+      args.push('-ss', options.start.toString());
+    }
+
+    args.push('-i', videoPath);
+
+    if (options.duration !== undefined) {
+      args.push('-t', options.duration.toString());
+    }
+
+    args.push(
       '-vn',
       '-acodec',
       'pcm_s16le',
       '-ar',
-      sampleRate.toString(),
+      (options.sampleRate || 16000).toString(),
       '-ac',
       '1',
       outputPath
-    ];
+    );
 
     await FFmpegRunner.run(ffmpeg, args);
   }
@@ -196,13 +204,6 @@ export class FFmpegRunner {
     await FFmpegRunner.run(ffmpeg, args);
   }
 
-  /**
-   * Resizes / reframes a video to any aspect ratio using specified framing mode:
-   * - blur: Blurred background fill
-   * - center / crop: Full-bleed center crop
-   * - pad / fit: Letterbox / pillarbox with black borders
-   * - stretch: Direct scale without preserving aspect ratio
-   */
   static async reframe(
     inputPath: string,
     outputPath: string,
@@ -287,7 +288,6 @@ export class FFmpegRunner {
         outputPath
       ];
     } else {
-      // mode === 'center' (default full-bleed crop)
       const vf = `scale=${TW}:${TH}:force_original_aspect_ratio=increase,crop=${TW}:${TH}:(iw-ow)/2:(ih-oh)/2,setsar=1`;
       args = [
         '-y',
@@ -312,9 +312,6 @@ export class FFmpegRunner {
     await FFmpegRunner.run(ffmpeg, args);
   }
 
-  /**
-   * Backwards compatible helper for 9:16 crop.
-   */
   static async cropTo916(
     inputPath: string,
     outputPath: string,
@@ -355,7 +352,7 @@ export class FFmpegRunner {
     await FFmpegRunner.run(ffmpeg, args);
   }
 
-  private static run(bin: string, args: string[]): Promise<void> {
+  static run(bin: string, args: string[]): Promise<void> {
     return new Promise((resolve, reject) => {
       const proc = spawn(bin, args);
       let stderr = '';

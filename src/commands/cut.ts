@@ -3,6 +3,7 @@ import { basename, extname, join, resolve } from 'node:path';
 import { config } from '@/core/config';
 import { FFmpegRunner } from '@/core/ffmpeg';
 import { logger } from '@/utils/logger';
+import { resolveMediaInput } from '@/utils/path';
 import { formatSecondsToTimestamp, parseRange, parseTimestamp } from '@/utils/time';
 
 export async function cutCommand(
@@ -19,9 +20,9 @@ export async function cutCommand(
   }
 ) {
   config.ensureDirs();
-  const input = resolve(videoPath);
+  const input = resolveMediaInput(videoPath);
   if (!existsSync(input)) {
-    logger.error(`Input file not found: ${input}`);
+    logger.error(`Input file not found: ${videoPath} (Checked: ${input})`);
     process.exit(1);
   }
 

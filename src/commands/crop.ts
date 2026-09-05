@@ -3,6 +3,7 @@ import { basename, extname, join, resolve } from 'node:path';
 import { config } from '@/core/config';
 import { FFmpegRunner, type FramingMode } from '@/core/ffmpeg';
 import { logger } from '@/utils/logger';
+import { resolveMediaInput } from '@/utils/path';
 
 export async function cropCommand(
   videoPath: string,
@@ -14,9 +15,9 @@ export async function cropCommand(
   }
 ) {
   config.ensureDirs();
-  const input = resolve(videoPath);
+  const input = resolveMediaInput(videoPath);
   if (!existsSync(input)) {
-    logger.error(`Input file not found: ${input}`);
+    logger.error(`Input file not found: ${videoPath} (Checked: ${input})`);
     process.exit(1);
   }
 
