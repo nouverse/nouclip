@@ -26,24 +26,19 @@ export class WhisperClient {
   ): Promise<WhisperResult> {
     const lang = options.language || 'id';
     const outJson = options.outputJson || `${audioPath.replace(/\.[^/.]+$/, '')}.whisper.json`;
-    const apiUrl = options.apiUrl || config.whisperComputeUrl || 'http://localhost:8880';
-    const apiKey = options.apiKey || config.whisperComputeApiKey;
+    const apiUrl = options.apiUrl || config.openAiAudioUrl || 'http://localhost:8880';
+    const apiKey = options.apiKey || config.openAiAudioApiKey;
+    const model = options.model || config.openAiAudioModel || 'large-v3';
 
-    logger.info(`Sending audio to Whisper STT API (${apiUrl})...`);
+    logger.info(`Sending audio to Whisper / Audio STT API (${apiUrl})...`);
 
     try {
-      const result = await WhisperClient.transcribeViaApi(
-        audioPath,
-        apiUrl,
-        apiKey,
-        lang,
-        options.model || 'large-v3'
-      );
+      const result = await WhisperClient.transcribeViaApi(audioPath, apiUrl, apiKey, lang, model);
       writeFileSync(outJson, JSON.stringify(result, null, 2), 'utf-8');
       return result;
     } catch (err: any) {
       throw new Error(
-        `Failed to connect to Whisper API at ${apiUrl}: ${err.message}.\nMake sure Voice Compute / Whisper STT is running (https://github.com/nouverse/voice-compute) or set NOUCLIP_WHISPER_COMPUTE_URL to a valid OpenAI-compatible Whisper endpoint.`
+        `Failed to connect to Audio STT API at ${apiUrl}: ${err.message}.\nMake sure Whisper STT is running (e.g. voice-compute) or set NOUCLIP_OPENAI_AUDIO_URL to a valid OpenAI-compatible speech endpoint (e.g. Groq, OpenAI).`
       );
     }
   }

@@ -116,39 +116,51 @@ export const config = {
     }
   },
 
-  // Whisper STT Endpoint
-  get whisperComputeUrl(): string | undefined {
+  // Audio / Speech STT Endpoint (OpenAI-compatible)
+  get openAiAudioUrl(): string | undefined {
     return (
+      process.env.NOUCLIP_OPENAI_AUDIO_URL ||
+      process.env.NOUCLIP_OPENAI_VOICE_URL ||
       process.env.NOUCLIP_WHISPER_COMPUTE_URL ||
       process.env.NOUCLIP_VOICE_COMPUTE_URL ||
+      process.env.OPENAI_AUDIO_URL ||
+      process.env.OPENAI_VOICE_URL ||
       process.env.WHISPER_COMPUTE_URL ||
       process.env.VOICE_COMPUTE_URL ||
       process.env.WHISPER_API_URL
     );
   },
 
-  get whisperComputeApiKey(): string | undefined {
+  get openAiAudioApiKey(): string | undefined {
     return (
+      process.env.NOUCLIP_OPENAI_AUDIO_API_KEY ||
+      process.env.NOUCLIP_OPENAI_VOICE_API_KEY ||
       process.env.NOUCLIP_WHISPER_COMPUTE_API_KEY ||
       process.env.NOUCLIP_VOICE_COMPUTE_API_KEY ||
+      process.env.OPENAI_AUDIO_API_KEY ||
+      process.env.OPENAI_VOICE_API_KEY ||
       process.env.WHISPER_COMPUTE_API_KEY ||
       process.env.VOICE_COMPUTE_API_KEY ||
       process.env.WHISPER_API_KEY
     );
   },
 
-  get voiceComputeUrl(): string | undefined {
-    return this.whisperComputeUrl;
-  },
-
-  get voiceComputeApiKey(): string | undefined {
-    return this.whisperComputeApiKey;
+  get openAiAudioModel(): string {
+    return (
+      process.env.NOUCLIP_OPENAI_AUDIO_MODEL ||
+      process.env.NOUCLIP_OPENAI_VOICE_MODEL ||
+      process.env.OPENAI_AUDIO_MODEL ||
+      process.env.OPENAI_VOICE_MODEL ||
+      'large-v3'
+    );
   },
 
   // LLM OpenAI-Compatible Endpoint (Optional)
-  get openAiBaseUrl(): string {
+  get openAiLlmUrl(): string {
     return (
+      process.env.NOUCLIP_OPENAI_LLM_URL ||
       process.env.NOUCLIP_OPENAI_BASE_URL ||
+      process.env.OPENAI_LLM_URL ||
       process.env.OPENAI_BASE_URL ||
       process.env.LLM_BASE_URL ||
       process.env.OPENAI_API_BASE ||
@@ -156,22 +168,58 @@ export const config = {
     );
   },
 
-  get openAiApiKey(): string {
+  get openAiLlmApiKey(): string {
     return (
+      process.env.NOUCLIP_OPENAI_LLM_API_KEY ||
       process.env.NOUCLIP_OPENAI_API_KEY ||
+      process.env.OPENAI_LLM_API_KEY ||
       process.env.OPENAI_API_KEY ||
       process.env.LLM_API_KEY ||
       ''
     );
   },
 
-  get openAiModel(): string {
+  get openAiLlmModel(): string {
     return (
+      process.env.NOUCLIP_OPENAI_LLM_MODEL ||
       process.env.NOUCLIP_OPENAI_MODEL ||
+      process.env.OPENAI_LLM_MODEL ||
       process.env.OPENAI_MODEL ||
       process.env.LLM_MODEL ||
       'gpt-4o-mini'
     );
+  },
+
+  // Aliases for backward compatibility
+  get openAiVoiceUrl(): string | undefined {
+    return this.openAiAudioUrl;
+  },
+  get openAiVoiceApiKey(): string | undefined {
+    return this.openAiAudioApiKey;
+  },
+  get openAiVoiceModel(): string {
+    return this.openAiAudioModel;
+  },
+  get whisperComputeUrl(): string | undefined {
+    return this.openAiAudioUrl;
+  },
+  get whisperComputeApiKey(): string | undefined {
+    return this.openAiAudioApiKey;
+  },
+  get voiceComputeUrl(): string | undefined {
+    return this.openAiAudioUrl;
+  },
+  get voiceComputeApiKey(): string | undefined {
+    return this.openAiAudioApiKey;
+  },
+  get openAiBaseUrl(): string {
+    return this.openAiLlmUrl;
+  },
+  get openAiApiKey(): string {
+    return this.openAiLlmApiKey;
+  },
+  get openAiModel(): string {
+    return this.openAiLlmModel;
   },
 
   // Binary Tools

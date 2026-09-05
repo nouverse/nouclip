@@ -59,9 +59,9 @@ export async function infoCommand(options: { json?: boolean }) {
       }
     },
     services: {
-      whisperComputeUrl: config.whisperComputeUrl || 'http://localhost:8880 (default)',
-      openAiBaseUrl: config.openAiBaseUrl,
-      openAiModel: config.openAiModel,
+      openAiAudioUrl: config.openAiAudioUrl || 'http://localhost:8880 (default)',
+      openAiLlmUrl: config.openAiLlmUrl,
+      openAiLlmModel: config.openAiLlmModel,
       ffmpegPath: config.ffmpegPath || 'system PATH',
       ytdlpPath: config.ytdlpPath || 'system PATH'
     }
@@ -91,9 +91,11 @@ export async function infoCommand(options: { json?: boolean }) {
 
   console.log('🔌 Connected Services:');
   console.log(
-    `  • STT Whisper (Voice Compute) : ${config.whisperComputeUrl || 'http://localhost:8880 (default)'}`
+    `  • Audio STT / Whisper Endpoint: ${config.openAiAudioUrl || 'http://localhost:8880 (default)'} (Model: ${config.openAiAudioModel})`
   );
-  console.log(`  • Optional LLM Endpoint       : ${config.openAiBaseUrl} (${config.openAiModel})`);
+  console.log(
+    `  • Optional LLM Endpoint       : ${config.openAiLlmUrl} (Model: ${config.openAiLlmModel})`
+  );
   console.log('');
 
   console.log('💡 How to customize storage paths:');
