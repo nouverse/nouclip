@@ -52,6 +52,8 @@ Run `nouclip info` anytime to inspect current paths, file counts, and storage us
 
 ## 📥 Installation
 
+> 💡 **Don't know how to setup?** You can let your AI agent install and configure everything autonomously! Jump to [Let Your AI Agent Setup & Use the CLI](#-let-your-ai-agent-use-the-cli).
+
 ### Method 1: Standalone Binaries (Pre-compiled)
 
 Download the pre-compiled standalone binary (zero runtime dependencies required) for your operating system from the **[GitHub Releases](https://github.com/nouverse/nouclip/releases)** page:
@@ -256,6 +258,18 @@ nouclip subtitle input.mp4 --sub captions.ass --bgm music.mp3 --bgm-volume 0.10 
 ## 🤖 Let Your AI Agent Use the CLI
 
 NouClip is designed from the ground up to be **agentic-first**. AI coding assistants and autonomous agents (such as [Nouride](https://github.com/nouverse/nouride), Claude Code, Cursor, Cline, OpenClaw, etc.) can inspect storage, reuse cached artifacts, and execute multi-step clipping pipelines deterministically using structured JSON outputs and the bundled skill.
+
+---
+
+### 💡 Don't know how to setup? Let your AI agent do it for you!
+
+You don't need to manually configure FFmpeg, yt-dlp, or install binaries yourself. Simply give your AI agent the bundled skill file from **[`skills/nouclip/SKILL.md`](./skills/nouclip/SKILL.md)** and ask:
+
+> *"Please setup and verify NouClip on my machine."*
+
+The skill includes self-contained instructions for your agent to automatically check for `nouclip`, `ffmpeg`, and `yt-dlp`, run OS-specific installations, and verify health without manual intervention.
+
+---
 
 ### 📦 Bundled Agent Skill
 

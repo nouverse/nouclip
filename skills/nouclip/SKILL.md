@@ -1,11 +1,69 @@
 ---
 name: nouclip
-description: CLI video clipping, universal aspect reframing (9:16, 1:1, 4:5), Whisper transcription, kinetic subtitle burning, typography presets, silence trimming, BGM ducking, and draft review workflows using NouClip CLI.
+description: CLI video clipping, universal aspect reframing (9:16, 1:1, 4:5), Whisper transcription, kinetic subtitle burning, typography presets, silence trimming, BGM ducking, dependency checks, and installation workflows using NouClip CLI.
 ---
 
 # NouClip — Agentic Video Clipper & Shorts Engine Skill
 
-Operational instructions and best practices for clipping videos, reframing aspects, transcribing with Whisper, applying typography presets, trimming silence, mixing ducked BGM, and burning kinetic subtitles using the `nouclip` CLI.
+Operational instructions and procedures for checking prerequisites, installing dependencies, clipping videos, reframing aspect ratios, transcribing with Whisper, applying typography presets, trimming silence, mixing ducked BGM, and burning kinetic subtitles using the `nouclip` CLI.
+
+---
+
+## 🛠️ Step 0: Verification & Self-Installation (For Agents)
+
+Before running clipping commands, verify that required host binaries are present on the system.
+
+### 1. Check if `nouclip` is Installed
+```bash
+nouclip --version
+```
+
+If `nouclip` is **not found** (`command not found` or `ENOENT`), install it using one of the following methods:
+
+- **Option A (Package Managers — if Bun or Node/npm is present):**
+  ```bash
+  # Using Bun (Fastest)
+  bun add -g nouclip
+
+  # Using npm
+  npm install -g nouclip
+
+  # Using pnpm
+  pnpm add -g nouclip
+  ```
+
+- **Option B (One-Line Standalone Script for Linux & macOS):**
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/nouverse/nouclip/main/install.sh | bash
+  ```
+
+- **Option C (Direct GitHub Releases Binary Download):**
+  ```bash
+  # Linux (x86_64)
+  curl -fsSL https://github.com/nouverse/nouclip/releases/latest/download/nouclip-linux-x64 -o /usr/local/bin/nouclip && chmod +x /usr/local/bin/nouclip
+
+  # macOS Apple Silicon (arm64)
+  curl -fsSL https://github.com/nouverse/nouclip/releases/latest/download/nouclip-darwin-arm64 -o /usr/local/bin/nouclip && chmod +x /usr/local/bin/nouclip
+
+  # macOS Intel (x86_64)
+  curl -fsSL https://github.com/nouverse/nouclip/releases/latest/download/nouclip-darwin-x64 -o /usr/local/bin/nouclip && chmod +x /usr/local/bin/nouclip
+
+  # Windows (PowerShell)
+  Invoke-WebRequest -Uri "https://github.com/nouverse/nouclip/releases/latest/download/nouclip-windows-x64.exe" -OutFile "$env:LOCALAPPDATA\Microsoft\WindowsApps\nouclip.exe"
+  ```
+
+### 2. Check & Install System Dependencies (`ffmpeg` & `yt-dlp`)
+Check if installed:
+```bash
+ffmpeg -version
+yt-dlp --version
+```
+
+If missing, install per host OS:
+- **macOS:** `brew install ffmpeg yt-dlp`
+- **Ubuntu/Debian:** `sudo apt update && sudo apt install -y ffmpeg && pip install yt-dlp`
+- **Arch Linux:** `sudo pacman -S ffmpeg yt-dlp`
+- **Windows:** `winget install Gyan.FFmpeg yt-dlp`
 
 ---
 
