@@ -3,57 +3,65 @@ import { basename, extname, join, resolve } from 'node:path';
 import { ASSGenerator, type WordTimestamp } from '@/core/ass';
 import { config } from '@/core/config';
 import { FFmpegRunner } from '@/core/ffmpeg';
+import { CliError, getErrorMessage } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import { resolveMediaInput } from '@/utils/path';
 
-export async function subtitleCommand(
-  videoPath: string,
-  options: {
-    timestamps?: string;
-    sub?: string;
-    fontSize?: string;
-    primaryColor?: string;
-    highlightColor?: string;
-    output?: string;
+export interface SubtitleCommandOptions {
+  timestamps?: string;
+  sub?: string;
+  fontSize?: string;
+  primaryColor?: string;
+  highlightColor?: string;
+  output?: string;
+}
+
+/** Reads `{ words: [...] }` from a Whisper JSON export. */
+export function readWordsFromJson(jsonPath: string): WordTimestamp[] {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(jsonPath, 'utf-8'));
+  } catch (err) {
+    throw new CliError(`Could not read timestamps JSON ${jsonPath}: ${getErrorMessage(err)}`);
   }
-) {
+
+  const words = (raw as { words?: WordTimestamp[] })?.words;
+  if (!Array.isArray(words) || words.length === 0) {
+    throw new CliError(`No words found in timestamps JSON: ${jsonPath}`);
+  }
+  return words;
+}
+
+export async function subtitleCommand(videoPath: string, options: SubtitleCommandOptions = {}) {
   config.ensureDirs();
+
   const input = resolveMediaInput(videoPath);
   if (!existsSync(input)) {
-    logger.error(`Video file not found: ${videoPath} (Checked: ${input})`);
-    process.exit(1);
+    throw new CliError(`Video file not found: ${videoPath} (Checked: ${input})`);
   }
 
   const subInput = options.sub || options.timestamps;
   if (!subInput) {
-    logger.error(
-      'Must provide subtitle file via --sub <file.ass|file.json> or --timestamps <file.json>'
+    throw new CliError(
+      'Must provide a subtitle file via --sub <file.ass|file.json> or --timestamps <file.json>'
     );
-    process.exit(1);
   }
 
   const subPath = resolveMediaInput(subInput);
   if (!existsSync(subPath)) {
-    logger.error(`Subtitle file not found: ${subInput} (Checked: ${subPath})`);
-    process.exit(1);
+    throw new CliError(`Subtitle file not found: ${subInput} (Checked: ${subPath})`);
   }
 
   const baseName = basename(input, extname(input));
   let burnAssPath = subPath;
 
-  // If provided a JSON timestamps file, compile it to ASS
+  // A JSON word-timestamps file is compiled into ASS first.
   if (subPath.endsWith('.json')) {
     logger.info(`Compiling word timestamps from ${subPath} into ASS styling...`);
-    const rawJson = JSON.parse(readFileSync(subPath, 'utf-8'));
-    const words: WordTimestamp[] = rawJson.words || [];
-
-    if (words.length === 0) {
-      logger.error('No words found in timestamps JSON.');
-      process.exit(1);
-    }
+    const words = readWordsFromJson(subPath);
 
     const assContent = ASSGenerator.generateKineticASS(words, {
-      fontSize: options.fontSize ? Number.parseInt(options.fontSize, 10) : 60,
+      fontSize: parseFontSize(options.fontSize),
       primaryColor: options.primaryColor,
       highlightColor: options.highlightColor
     });
@@ -69,11 +77,16 @@ export async function subtitleCommand(
 
   logger.info(`Burning subtitle (${burnAssPath}) into ${output}...`);
 
-  try {
-    await FFmpegRunner.burnSubtitles(input, burnAssPath, output);
-    logger.success(`🎉 Subtitled video rendered: ${output}`);
-  } catch (err: any) {
-    logger.error(`Subtitle burning failed: ${err.message}`);
-    process.exit(1);
+  await FFmpegRunner.burnSubtitles(input, burnAssPath, output);
+  logger.success(`🎉 Subtitled video rendered: ${output}`);
+}
+
+/** Parses `--font-size`, rejecting values that would produce unreadable ASS. */
+export function parseFontSize(value: string | undefined, fallback = 60): number {
+  if (value === undefined) return fallback;
+  const size = Number.parseInt(value, 10);
+  if (!Number.isFinite(size) || size <= 0) {
+    throw new CliError(`Invalid --font-size "${value}": expected a positive number.`);
   }
+  return size;
 }

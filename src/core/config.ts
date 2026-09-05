@@ -1,62 +1,41 @@
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { applyEnv, firstEnv, parseEnvFile } from '@/core/env';
 
-function parseEnvFile(filePath: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  if (!existsSync(filePath)) return result;
-
-  try {
-    const content = readFileSync(filePath, 'utf-8');
-    for (const line of content.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eqIdx = trimmed.indexOf('=');
-      if (eqIdx === -1) continue;
-
-      const key = trimmed.slice(0, eqIdx).trim();
-      let val = trimmed.slice(eqIdx + 1).trim();
-
-      // Remove inline comments
-      const commentIdx = val.indexOf(' #');
-      if (commentIdx !== -1) {
-        val = val.slice(0, commentIdx).trim();
-      }
-
-      // Strip quotes if present
-      if (
-        (val.startsWith('"') && val.endsWith('"')) ||
-        (val.startsWith("'") && val.endsWith("'"))
-      ) {
-        val = val.slice(1, -1);
-      }
-
-      if (key && !process.env[key]) {
-        result[key] = val;
-      }
-    }
-  } catch {}
-
-  return result;
-}
-
-// 1. Load global ~/.nouclip/.env
 const globalNouclipDir = join(homedir(), '.nouclip');
-const globalEnvPath = join(globalNouclipDir, '.env');
-const globalEnv = parseEnvFile(globalEnvPath);
-for (const [k, v] of Object.entries(globalEnv)) {
-  if (!process.env[k]) {
-    process.env[k] = v;
-  }
+
+/**
+ * Loads `~/.nouclip/.env` then `./.env`. Existing process env always wins,
+ * and the global file is read first so a project-local file can't silently
+ * shadow an explicit shell variable.
+ */
+export function loadEnvFiles(): void {
+  applyEnv(parseEnvFile(join(globalNouclipDir, '.env')));
+  applyEnv(parseEnvFile(join(process.cwd(), '.env')));
 }
 
-// 2. Load local ./.env if in different cwd
-const localEnv = parseEnvFile(join(process.cwd(), '.env'));
-for (const [k, v] of Object.entries(localEnv)) {
-  if (!process.env[k]) {
-    process.env[k] = v;
-  }
-}
+loadEnvFiles();
+
+/** Env keys accepted for each setting, in precedence order. */
+export const ENV_KEYS = {
+  audioUrl: ['NOUCLIP_OPENAI_AUDIO_URL', 'OPENAI_AUDIO_URL'],
+  audioApiKey: ['NOUCLIP_OPENAI_AUDIO_API_KEY', 'OPENAI_AUDIO_API_KEY'],
+  audioModel: ['NOUCLIP_OPENAI_AUDIO_MODEL', 'OPENAI_AUDIO_MODEL'],
+  llmUrl: ['NOUCLIP_OPENAI_LLM_URL', 'OPENAI_LLM_URL'],
+  llmApiKey: ['NOUCLIP_OPENAI_LLM_API_KEY', 'OPENAI_LLM_API_KEY'],
+  llmModel: ['NOUCLIP_OPENAI_LLM_MODEL', 'OPENAI_LLM_MODEL'],
+  ffmpegPath: ['NOUCLIP_FFMPEG_PATH', 'FFMPEG_PATH'],
+  ffprobePath: ['NOUCLIP_FFPROBE_PATH', 'FFPROBE_PATH'],
+  ytdlpPath: ['NOUCLIP_YTDLP_PATH', 'YTDLP_PATH']
+} as const;
+
+export const DEFAULTS = {
+  audioUrl: 'http://localhost:8880',
+  audioModel: 'large-v3',
+  llmUrl: 'https://api.openai.com/v1',
+  llmModel: 'gpt-4o-mini'
+} as const;
 
 export const config = {
   // Storage & Artifact Directories
@@ -99,139 +78,61 @@ export const config = {
     return join(this.workspaceDir, 'output');
   },
 
-  ensureDirs(): void {
-    const dirs = [
+  /** All managed directories, in creation order. */
+  get allDirs(): string[] {
+    return [
       this.workspaceDir,
       this.downloadDir,
       this.transcriptDir,
       this.segmentDir,
       this.outputDir
     ];
-    for (const dir of dirs) {
+  },
+
+  ensureDirs(): void {
+    for (const dir of this.allDirs) {
       if (!existsSync(dir)) {
-        try {
-          mkdirSync(dir, { recursive: true });
-        } catch {}
+        mkdirSync(dir, { recursive: true });
       }
     }
   },
 
   // Audio / Speech STT Endpoint (OpenAI-compatible)
   get openAiAudioUrl(): string | undefined {
-    return (
-      process.env.NOUCLIP_OPENAI_AUDIO_URL ||
-      process.env.NOUCLIP_OPENAI_VOICE_URL ||
-      process.env.NOUCLIP_WHISPER_COMPUTE_URL ||
-      process.env.NOUCLIP_VOICE_COMPUTE_URL ||
-      process.env.OPENAI_AUDIO_URL ||
-      process.env.OPENAI_VOICE_URL ||
-      process.env.WHISPER_COMPUTE_URL ||
-      process.env.VOICE_COMPUTE_URL ||
-      process.env.WHISPER_API_URL
-    );
+    return firstEnv([...ENV_KEYS.audioUrl]);
   },
 
   get openAiAudioApiKey(): string | undefined {
-    return (
-      process.env.NOUCLIP_OPENAI_AUDIO_API_KEY ||
-      process.env.NOUCLIP_OPENAI_VOICE_API_KEY ||
-      process.env.NOUCLIP_WHISPER_COMPUTE_API_KEY ||
-      process.env.NOUCLIP_VOICE_COMPUTE_API_KEY ||
-      process.env.OPENAI_AUDIO_API_KEY ||
-      process.env.OPENAI_VOICE_API_KEY ||
-      process.env.WHISPER_COMPUTE_API_KEY ||
-      process.env.VOICE_COMPUTE_API_KEY ||
-      process.env.WHISPER_API_KEY
-    );
+    return firstEnv([...ENV_KEYS.audioApiKey]);
   },
 
   get openAiAudioModel(): string {
-    return (
-      process.env.NOUCLIP_OPENAI_AUDIO_MODEL ||
-      process.env.NOUCLIP_OPENAI_VOICE_MODEL ||
-      process.env.OPENAI_AUDIO_MODEL ||
-      process.env.OPENAI_VOICE_MODEL ||
-      'large-v3'
-    );
+    return firstEnv([...ENV_KEYS.audioModel]) ?? DEFAULTS.audioModel;
   },
 
   // LLM OpenAI-Compatible Endpoint (Optional)
   get openAiLlmUrl(): string {
-    return (
-      process.env.NOUCLIP_OPENAI_LLM_URL ||
-      process.env.NOUCLIP_OPENAI_BASE_URL ||
-      process.env.OPENAI_LLM_URL ||
-      process.env.OPENAI_BASE_URL ||
-      process.env.LLM_BASE_URL ||
-      process.env.OPENAI_API_BASE ||
-      'https://api.openai.com/v1'
-    );
+    return firstEnv([...ENV_KEYS.llmUrl]) ?? DEFAULTS.llmUrl;
   },
 
   get openAiLlmApiKey(): string {
-    return (
-      process.env.NOUCLIP_OPENAI_LLM_API_KEY ||
-      process.env.NOUCLIP_OPENAI_API_KEY ||
-      process.env.OPENAI_LLM_API_KEY ||
-      process.env.OPENAI_API_KEY ||
-      process.env.LLM_API_KEY ||
-      ''
-    );
+    return firstEnv([...ENV_KEYS.llmApiKey]) ?? '';
   },
 
   get openAiLlmModel(): string {
-    return (
-      process.env.NOUCLIP_OPENAI_LLM_MODEL ||
-      process.env.NOUCLIP_OPENAI_MODEL ||
-      process.env.OPENAI_LLM_MODEL ||
-      process.env.OPENAI_MODEL ||
-      process.env.LLM_MODEL ||
-      'gpt-4o-mini'
-    );
-  },
-
-  // Aliases for backward compatibility
-  get openAiVoiceUrl(): string | undefined {
-    return this.openAiAudioUrl;
-  },
-  get openAiVoiceApiKey(): string | undefined {
-    return this.openAiAudioApiKey;
-  },
-  get openAiVoiceModel(): string {
-    return this.openAiAudioModel;
-  },
-  get whisperComputeUrl(): string | undefined {
-    return this.openAiAudioUrl;
-  },
-  get whisperComputeApiKey(): string | undefined {
-    return this.openAiAudioApiKey;
-  },
-  get voiceComputeUrl(): string | undefined {
-    return this.openAiAudioUrl;
-  },
-  get voiceComputeApiKey(): string | undefined {
-    return this.openAiAudioApiKey;
-  },
-  get openAiBaseUrl(): string {
-    return this.openAiLlmUrl;
-  },
-  get openAiApiKey(): string {
-    return this.openAiLlmApiKey;
-  },
-  get openAiModel(): string {
-    return this.openAiLlmModel;
+    return firstEnv([...ENV_KEYS.llmModel]) ?? DEFAULTS.llmModel;
   },
 
   // Binary Tools
   get ffmpegPath(): string | undefined {
-    return process.env.NOUCLIP_FFMPEG_PATH || process.env.FFMPEG_PATH;
+    return firstEnv([...ENV_KEYS.ffmpegPath]);
   },
 
   get ffprobePath(): string | undefined {
-    return process.env.NOUCLIP_FFPROBE_PATH || process.env.FFPROBE_PATH;
+    return firstEnv([...ENV_KEYS.ffprobePath]);
   },
 
   get ytdlpPath(): string | undefined {
-    return process.env.NOUCLIP_YTDLP_PATH || process.env.YTDLP_PATH;
+    return firstEnv([...ENV_KEYS.ytdlpPath]);
   }
 };

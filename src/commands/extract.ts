@@ -2,68 +2,41 @@ import { existsSync, unlinkSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
 import { config } from '@/core/config';
 import { FFmpegRunner } from '@/core/ffmpeg';
+import { type TimeSelectionOptions, resolveTimeSelection, selectionSuffix } from '@/core/selection';
 import { WhisperClient } from '@/core/whisper';
+import { CliError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import { resolveMediaInput } from '@/utils/path';
-import { formatSecondsToTimestamp, parseRange, parseTimestamp } from '@/utils/time';
+import { formatSecondsToTimestamp } from '@/utils/time';
 
-export async function extractCommand(
-  videoPath: string,
-  options: {
-    range?: string;
-    start?: string;
-    from?: string;
-    end?: string;
-    to?: string;
-    duration?: string;
-    lang?: string;
-    output?: string;
-    model?: string;
-    keepWav?: boolean;
-  }
-) {
+export interface ExtractCommandOptions extends TimeSelectionOptions {
+  lang?: string;
+  output?: string;
+  model?: string;
+  keepWav?: boolean;
+}
+
+export async function extractCommand(videoPath: string, options: ExtractCommandOptions = {}) {
   config.ensureDirs();
-  const input = resolveMediaInput(videoPath);
 
+  const input = resolveMediaInput(videoPath);
   if (!existsSync(input)) {
-    logger.error(`File not found: ${videoPath} (Checked: ${input})`);
-    process.exit(1);
+    throw new CliError(`File not found: ${videoPath} (Checked: ${input})`);
   }
 
   logger.info(`Source media: ${input}`);
   const baseName = basename(input, extname(input));
 
-  let startSec = 0;
-  let durSec = 0;
-  let hasRange = false;
+  const selection = resolveTimeSelection(options);
+  const suffix = selectionSuffix(selection);
+  const tempWav = join(config.segmentDir, `${baseName}${suffix}.temp.wav`);
 
-  if (options.range) {
-    const parsed = parseRange(options.range);
-    startSec = parsed.start;
-    durSec = parsed.duration;
-    hasRange = true;
-  } else if (options.start || options.from) {
-    startSec = parseTimestamp(options.start || options.from);
-    if (options.duration) {
-      durSec = parseTimestamp(options.duration);
-    } else if (options.end || options.to) {
-      durSec = parseTimestamp(options.end || options.to) - startSec;
-    }
-    hasRange = true;
-  }
-
-  const rangeSuffix = hasRange ? `_${Math.round(startSec)}s-${Math.round(startSec + durSec)}s` : '';
-
-  const tempWav = join(config.segmentDir, `${baseName}${rangeSuffix}.temp.wav`);
-
-  if (hasRange) {
+  if (selection.hasSelection) {
+    const { start, duration } = selection;
     logger.info(
-      `Extracting audio range: ${formatSecondsToTimestamp(startSec)} -> ${formatSecondsToTimestamp(startSec + durSec)} (${Math.round(durSec)}s)...`
+      `Extracting audio range: ${formatSecondsToTimestamp(start)} -> ${formatSecondsToTimestamp(start + duration)} (${Math.round(duration)}s)...`
     );
-    await FFmpegRunner.extractAudio(input, tempWav, {
-      start: startSec,
-      duration: durSec
-    });
+    await FFmpegRunner.extractAudio(input, tempWav, { start, duration });
   } else {
     logger.info(`Extracting full audio from ${input}...`);
     await FFmpegRunner.extractAudio(input, tempWav);
@@ -73,7 +46,7 @@ export async function extractCommand(
 
   const jsonPath = options.output
     ? resolve(options.output)
-    : join(config.transcriptDir, `${baseName}${rangeSuffix}.whisper.json`);
+    : join(config.transcriptDir, `${baseName}${suffix}.whisper.json`);
 
   logger.info(`Running Whisper transcription (${options.lang || 'id'})...`);
 
@@ -87,14 +60,18 @@ export async function extractCommand(
     logger.success(`Transcription completed (${result.words.length} words detected)`);
     console.log('📝 Output JSON saved to:');
     console.log(`👉 ${jsonPath}`);
-
-    if (!options.keepWav && existsSync(tempWav)) {
-      try {
-        unlinkSync(tempWav);
-      } catch {}
+  } finally {
+    if (!options.keepWav) {
+      removeQuietly(tempWav);
     }
-  } catch (err: any) {
-    logger.error(`Extraction failed: ${err.message}`);
-    process.exit(1);
+  }
+}
+
+/** Best-effort temp-file cleanup: never masks the original failure. */
+export function removeQuietly(filePath: string): void {
+  try {
+    if (existsSync(filePath)) unlinkSync(filePath);
+  } catch {
+    /* leave the temp file behind rather than failing the command */
   }
 }

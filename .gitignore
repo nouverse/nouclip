@@ -1,17 +1,21 @@
+# Dependencies & build output
 node_modules/
 dist/
-temp/
-downloads/
-.env
-*.log
+coverage/
 *.tsbuildinfo
+
+# Local environment
+.env
+.env.local
+
+# NouClip workspace artifacts
+.nouclip/
+downloads/
+segments/
+output/
+transcripts/
+temp/
+
+# Logs & OS cruft
+*.log
 .DS_Store
-*.mp4
-*.m4a
-*.wav
-*.mp3
-*.ass
-*.json
-!package.json
-!tsconfig.json
-!biome.json

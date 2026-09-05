@@ -15,17 +15,22 @@
   ],
   "scripts": {
     "dev": "bun run src/cli.ts",
-    "test": "bun test tests",
+    "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check src",
-    "format": "biome format --write src",
+    "lint": "biome check src tests",
+    "format": "biome format --write src tests",
     "build:js": "bun build src/cli.ts --target=node --minify --outfile dist/cli.js",
     "build": "bun run build:js && bun build --compile --minify src/cli.ts --outfile dist/nouclip",
     "build:linux": "bun build --compile --minify --target=bun-linux-x64 src/cli.ts --outfile dist/nouclip-linux-x64",
     "build:win": "bun build --compile --minify --target=bun-windows-x64 src/cli.ts --outfile dist/nouclip-windows-x64.exe",
     "build:darwin-arm64": "bun build --compile --minify --target=bun-darwin-arm64 src/cli.ts --outfile dist/nouclip-darwin-arm64",
     "build:darwin-x64": "bun build --compile --minify --target=bun-darwin-x64 src/cli.ts --outfile dist/nouclip-darwin-x64",
-    "build:all": "bun run build:js && bun run build:linux && bun run build:win && bun run build:darwin-arm64 && bun run build:darwin-x64"
+    "build:all": "bun run build:js && bun run build:linux && bun run build:win && bun run build:darwin-arm64 && bun run build:darwin-x64",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
+    "lint:fix": "biome check --write src tests",
+    "format:check": "biome format src tests",
+    "check": "bun run typecheck && bun run lint && bun run test"
   },
   "keywords": [
     "video",
@@ -51,5 +56,8 @@
     "@biomejs/biome": "^1.9.4",
     "@types/bun": "latest",
     "typescript": "^5.7.3"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
   }
 }

@@ -3,44 +3,35 @@ import { join, resolve } from 'node:path';
 import { config } from '@/core/config';
 
 /**
- * Resolves video or media input path intelligently.
- * Checks:
- * 1. Absolute / Relative path anywhere on system (e.g. /mnt/nas/video.mp4, ./video.mp4)
- * 2. Inside downloads dir (~/.nouclip/downloads/video.mp4)
- * 3. Inside segments dir (~/.nouclip/segments/video.mp4)
- * 4. Inside output dir (~/.nouclip/output/video.mp4)
+ * Resolves a media/asset argument against the workspace.
+ *
+ * Lookup order:
+ * 1. The path as given (absolute or relative to cwd)
+ * 2. downloads dir
+ * 3. segments dir
+ * 4. output dir
+ * 5. transcripts dir
+ *
+ * Falls back to the resolved direct path so callers can report a concrete
+ * location in their "not found" message.
  */
-export function resolveMediaInput(inputPath: string): string {
+export function resolveMediaInput(
+  inputPath: string,
+  searchDirs: string[] = [
+    config.downloadDir,
+    config.segmentDir,
+    config.outputDir,
+    config.transcriptDir
+  ]
+): string {
   if (!inputPath) return inputPath;
 
-  // 1. Direct path check
   const direct = resolve(inputPath);
-  if (existsSync(direct)) {
-    return direct;
-  }
+  if (existsSync(direct)) return direct;
 
-  // 2. Check within configured downloads dir
-  const inDownloads = join(config.downloadDir, inputPath);
-  if (existsSync(inDownloads)) {
-    return inDownloads;
-  }
-
-  // 3. Check within segments dir
-  const inSegments = join(config.segmentDir, inputPath);
-  if (existsSync(inSegments)) {
-    return inSegments;
-  }
-
-  // 4. Check within output dir
-  const inOutput = join(config.outputDir, inputPath);
-  if (existsSync(inOutput)) {
-    return inOutput;
-  }
-
-  // 5. Check within transcripts dir (if asking for json/ass)
-  const inTranscripts = join(config.transcriptDir, inputPath);
-  if (existsSync(inTranscripts)) {
-    return inTranscripts;
+  for (const dir of searchDirs) {
+    const candidate = join(dir, inputPath);
+    if (existsSync(candidate)) return candidate;
   }
 
   return direct;

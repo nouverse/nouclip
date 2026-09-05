@@ -6,7 +6,8 @@ export interface ClipHighlight {
   start: number;
   end: number;
   duration: number;
-  viralityScore: number; // 1-100
+  /** 1-100 */
+  viralityScore: number;
   reason: string;
 }
 
@@ -21,38 +22,27 @@ export interface LLMConfig {
   temperature?: number;
 }
 
+export interface FindHooksOptions {
+  maxClips?: number;
+  targetMinDuration?: number;
+  targetMaxDuration?: number;
+}
+
 export class LLMClient {
-  private baseUrl: string;
-  private apiKey: string;
-  private model: string;
-  private temperature: number;
+  private readonly baseUrl: string;
+  private readonly apiKey: string;
+  private readonly model: string;
+  private readonly temperature: number;
 
   constructor(cfg: LLMConfig = {}) {
-    this.baseUrl = cfg.baseUrl || config.openAiBaseUrl;
-    this.apiKey = cfg.apiKey || config.openAiApiKey;
-    this.model = cfg.model || config.openAiModel;
+    this.baseUrl = cfg.baseUrl || config.openAiLlmUrl;
+    this.apiKey = cfg.apiKey || config.openAiLlmApiKey;
+    this.model = cfg.model || config.openAiLlmModel;
     this.temperature = cfg.temperature ?? 0.3;
   }
 
-  /**
-   * Analyze transcript using any OpenAI-compatible LLM endpoint
-   * (OpenAI, Groq, OpenRouter, Ollama, local models, etc.)
-   * to detect top viral moments, hooks, and clean start/end timestamps.
-   */
-  async findViralHooks(
-    transcriptText: string,
-    words: { word: string; start: number; end: number }[],
-    options: {
-      maxClips?: number;
-      targetMinDuration?: number;
-      targetMaxDuration?: number;
-    } = {}
-  ): Promise<ClipHighlight[]> {
-    const maxClips = options.maxClips || 5;
-    const minDur = options.targetMinDuration || 20;
-    const maxDur = options.targetMaxDuration || 60;
-
-    const systemPrompt = `You are an elite short-form video editor and viral hook strategist for TikTok, YouTube Shorts, and Instagram Reels.
+  static buildSystemPrompt(maxClips: number, minDur: number, maxDur: number): string {
+    return `You are an elite short-form video editor and viral hook strategist for TikTok, YouTube Shorts, and Instagram Reels.
 Your task is to analyze long-form transcripts with precise timestamps and identify the top ${maxClips} most engaging, high-retention clip segments.
 
 CRITICAL RULES:
@@ -61,14 +51,26 @@ CRITICAL RULES:
 3. The end timestamp MUST conclude a complete thought or punchline (NEVER cut off mid-sentence).
 4. Extract timestamps ONLY from the provided word-level timing data.
 5. Return strictly valid JSON conforming to the requested schema.`;
+  }
 
-    const userPrompt = `Here is the transcript summary and word timestamps:
+  static buildUserPrompt(
+    transcriptText: string,
+    words: { word: string; start: number; end: number }[],
+    maxClips: number
+  ): string {
+    const sample = words.slice(0, 500);
+    const remainder =
+      words.length > 500
+        ? `... [and ${words.length - 500} more words till ${words[words.length - 1]?.end}s]`
+        : '';
+
+    return `Here is the transcript summary and word timestamps:
 TRANSCRIPT SUMMARY:
 "${transcriptText.slice(0, 4000)}"
 
 WORD-LEVEL TIMESTAMPS SAMPLE:
-${JSON.stringify(words.slice(0, 500))}
-${words.length > 500 ? `... [and ${words.length - 500} more words till ${words[words.length - 1]?.end}s]` : ''}
+${JSON.stringify(sample)}
+${remainder}
 
 Find the top ${maxClips} viral clips. Return a JSON object with this exact structure:
 {
@@ -84,12 +86,52 @@ Find the top ${maxClips} viral clips. Return a JSON object with this exact struc
     }
   ]
 }`;
+  }
+
+  /**
+   * Extracts the clips array from a model response.
+   * Tolerates prose-wrapped or fenced JSON, which small local models emit
+   * even when asked for `response_format: json_object`.
+   */
+  static parseClipsResponse(content: string): ClipHighlight[] {
+    const candidates = [content];
+    const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenced) candidates.push(fenced[1]);
+    const braced = content.match(/\{[\s\S]*\}/);
+    if (braced) candidates.push(braced[0]);
+
+    for (const candidate of candidates) {
+      try {
+        const parsed = JSON.parse(candidate) as Partial<HighlightAnalysisResult>;
+        if (Array.isArray(parsed?.clips)) {
+          return parsed.clips.filter(
+            (clip) => Number.isFinite(clip?.start) && Number.isFinite(clip?.end)
+          );
+        }
+      } catch {
+        /* try the next candidate */
+      }
+    }
+
+    return [];
+  }
+
+  /**
+   * Analyze a transcript with any OpenAI-compatible LLM endpoint
+   * (OpenAI, Groq, OpenRouter, Ollama, local models, etc.) to detect viral
+   * moments with clean start/end timestamps.
+   */
+  async findViralHooks(
+    transcriptText: string,
+    words: { word: string; start: number; end: number }[],
+    options: FindHooksOptions = {}
+  ): Promise<ClipHighlight[]> {
+    const maxClips = options.maxClips || 5;
+    const minDur = options.targetMinDuration || 20;
+    const maxDur = options.targetMaxDuration || 60;
 
     const url = `${this.baseUrl.replace(/\/+$/, '')}/chat/completions`;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
-
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (this.apiKey) {
       headers.Authorization = `Bearer ${this.apiKey}`;
     }
@@ -100,8 +142,11 @@ Find the top ${maxClips} viral clips. Return a JSON object with this exact struc
       body: JSON.stringify({
         model: this.model,
         messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
+          { role: 'system', content: LLMClient.buildSystemPrompt(maxClips, minDur, maxDur) },
+          {
+            role: 'user',
+            content: LLMClient.buildUserPrompt(transcriptText, words, maxClips)
+          }
         ],
         response_format: { type: 'json_object' },
         temperature: this.temperature
@@ -116,18 +161,7 @@ Find the top ${maxClips} viral clips. Return a JSON object with this exact struc
     const data = (await res.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
-    const content = data.choices?.[0]?.message?.content || '{}';
 
-    try {
-      const parsed = JSON.parse(content) as HighlightAnalysisResult;
-      return parsed.clips || [];
-    } catch {
-      const match = content.match(/\{[\s\S]*\}/);
-      if (match) {
-        const parsed = JSON.parse(match[0]) as HighlightAnalysisResult;
-        return parsed.clips || [];
-      }
-      return [];
-    }
+    return LLMClient.parseClipsResponse(data.choices?.[0]?.message?.content || '{}');
   }
 }

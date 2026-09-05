@@ -9,14 +9,33 @@ import { infoCommand } from '@/commands/info';
 import { listCommand } from '@/commands/list';
 import { subtitleCommand } from '@/commands/subtitle';
 import { transcriptCommand } from '@/commands/transcript';
+import { getErrorMessage, getExitCode } from '@/utils/errors';
+import { logger } from '@/utils/logger';
+import { VERSION } from '@/version';
 import { Command } from 'commander';
+
+/**
+ * Wraps a command handler so every failure is reported and exits consistently.
+ * Commands themselves throw (usually `CliError`) instead of calling process.exit.
+ */
+function action<A extends unknown[]>(handler: (...args: A) => unknown | Promise<unknown>) {
+  return async (...args: A): Promise<void> => {
+    try {
+      await handler(...args);
+    } catch (err) {
+      logger.error(getErrorMessage(err));
+      process.exitCode = getExitCode(err);
+    }
+  };
+}
 
 const program = new Command();
 
 program
   .name('nouclip')
   .description('Agentic video clipper, aspect ratio reframer & kinetic subtitle engine')
-  .version('0.2026.9.5');
+  .version(VERSION)
+  .showHelpAfterError();
 
 // 1. Storage & Context Introspection Commands
 program
@@ -24,7 +43,7 @@ program
   .alias('paths')
   .description('Display workspace paths, stored asset counts, storage size, and service config')
   .option('--json', 'Output results as JSON payload')
-  .action(infoCommand);
+  .action(action(infoCommand));
 
 program
   .command('list [type]')
@@ -33,7 +52,7 @@ program
     'List stored assets (types: "downloads", "transcripts", "segments", "output", "all")'
   )
   .option('--json', 'Output list as JSON payload')
-  .action(listCommand);
+  .action(action(listCommand));
 
 // 2. End-to-End Pipeline
 program
@@ -73,18 +92,18 @@ program
   .option('--download-dir <dir>', 'Custom directory to store downloaded videos')
   .option('--output-dir <dir>', 'Custom directory to store final videos')
   .option('--keep-temp', 'Keep intermediate wav/temp files')
-  .action(autoCommand);
+  .action(action(autoCommand));
 
 // 3. Modular Operations
 program
   .command('download <url>')
   .description('Download video or section from YouTube via yt-dlp with caching support')
-  .option('-s, --start <time>', 'Start timestamp')
-  .option('-e, --end <time>', 'End timestamp')
+  .option('-s, --start <time>', 'Start timestamp e.g. "13:25", "85s"')
+  .option('-e, --end <time>', 'End timestamp e.g. "14:50"')
   .option('-o, --output <filename>', 'Output filename template')
   .option('--dir <directory>', 'Output download directory')
   .option('--force', 'Force re-download even if already cached')
-  .action(downloadCommand);
+  .action(action(downloadCommand));
 
 program
   .command('cut <video>')
@@ -97,7 +116,7 @@ program
   .option('-d, --duration <time>', 'Duration e.g. "30s", "45"')
   .option('-o, --output <path>', 'Output MP4 path')
   .option('--reencode', 'Re-encode video with libx264 (default: false fast copy)')
-  .action(cutCommand);
+  .action(action(cutCommand));
 
 program
   .command('crop <video>')
@@ -116,15 +135,22 @@ program
   .option('--blur', 'Shortcut for --mode blur')
   .option('--center', 'Shortcut for --mode center (crop fill)')
   .option('-o, --output <path>', 'Output MP4 path')
-  .action(cropCommand);
+  .action(action(cropCommand));
 
 program
   .command('extract <video>')
   .description('Extract audio from video and run Whisper to generate word timestamps JSON')
+  .option('-r, --range <range>', 'Limit extraction to a range e.g. "13:25-14:50"')
+  .option('-s, --start <time>', 'Start time e.g. "13:25", "85s"')
+  .option('--from <time>', 'Alias for --start')
+  .option('-e, --end <time>', 'End time e.g. "14:50"')
+  .option('--to <time>', 'Alias for --end')
+  .option('-d, --duration <time>', 'Duration e.g. "30s", "45"')
   .option('-l, --lang <lang>', "Transcription language (default: 'id')", 'id')
   .option('-m, --model <model>', "Whisper model name (default: 'large-v3')", 'large-v3')
+  .option('--keep-wav', 'Keep the intermediate WAV file')
   .option('-o, --output <path>', 'Output JSON path')
-  .action(extractCommand);
+  .action(action(extractCommand));
 
 program
   .command('transcript <videoOrJson>')
@@ -136,7 +162,7 @@ program
   )
   .option('-l, --lang <lang>', "Transcription language (default: 'id')", 'id')
   .option('-o, --output <path>', 'Output file path')
-  .action(transcriptCommand);
+  .action(action(transcriptCommand));
 
 program
   .command('subtitle <video>')
@@ -147,7 +173,7 @@ program
   .option('--primary-color <hex>', 'Inactive text color (default: &H00FFFFFF&)')
   .option('--highlight-color <hex>', 'Active animated word color (default: &H0000FFFF&)')
   .option('-o, --output <path>', 'Output MP4 path')
-  .action(subtitleCommand);
+  .action(action(subtitleCommand));
 
 program
   .command('highlight <videoOrJson>')
@@ -172,6 +198,6 @@ program
     "LLM model name (e.g. 'gpt-4o-mini', 'llama-3.3-70b-versatile', 'llama3.2')"
   )
   .option('-o, --output <path>', 'Output highlights JSON path')
-  .action(highlightCommand);
+  .action(action(highlightCommand));
 
 program.parse(process.argv);

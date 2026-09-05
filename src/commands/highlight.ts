@@ -1,92 +1,89 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import type { WordTimestamp } from '@/core/ass';
 import { config } from '@/core/config';
+import { findHeuristicMoments, findKeywordMoments } from '@/core/highlights';
 import { type ClipHighlight, LLMClient } from '@/core/llm';
+import { CliError, getErrorMessage } from '@/utils/errors';
 import { logger } from '@/utils/logger';
+import { resolveMediaInput } from '@/utils/path';
 import pc from 'picocolors';
+
+export interface HighlightCommandOptions {
+  maxClips?: string;
+  keyword?: string;
+  model?: string;
+  baseUrl?: string;
+  apiKey?: string;
+  minDuration?: string;
+  maxDuration?: string;
+  output?: string;
+}
+
+/** Parses a numeric CLI flag, rejecting garbage instead of silently NaN-ing. */
+export function parseNumericOption(
+  value: string | undefined,
+  flag: string,
+  fallback: number
+): number {
+  if (value === undefined) return fallback;
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new CliError(`Invalid ${flag} "${value}": expected a positive number.`);
+  }
+  return parsed;
+}
+
+/** Resolves the transcript JSON companion for a video path. */
+export function resolveTranscriptJson(input: string): string {
+  if (input.endsWith('.json')) return input;
+  return `${input.replace(/\.[^/.]+$/, '')}.whisper.json`;
+}
 
 export async function highlightCommand(
   jsonOrVideoPath: string,
-  options: {
-    maxClips?: string;
-    keyword?: string;
-    model?: string;
-    baseUrl?: string;
-    apiKey?: string;
-    minDuration?: string;
-    maxDuration?: string;
-    output?: string;
-  }
+  options: HighlightCommandOptions = {}
 ) {
-  const input = resolve(jsonOrVideoPath);
+  config.ensureDirs();
+
+  const input = resolveMediaInput(jsonOrVideoPath);
   if (!existsSync(input)) {
-    logger.error(`File not found: ${input}`);
-    process.exit(1);
+    throw new CliError(`File not found: ${jsonOrVideoPath} (Checked: ${input})`);
   }
 
-  let jsonPath = input;
-  if (!input.endsWith('.json')) {
-    jsonPath = `${input.replace(/\.[^/.]+$/, '')}.whisper.json`;
-    if (!existsSync(jsonPath)) {
-      logger.error(`Please run 'nouclip extract' first to generate ${jsonPath}`);
-      process.exit(1);
-    }
+  const jsonPath = resolveTranscriptJson(input);
+  if (!existsSync(jsonPath)) {
+    throw new CliError(`Run 'nouclip extract' first to generate ${jsonPath}`);
   }
 
-  const rawData = JSON.parse(readFileSync(jsonPath, 'utf-8'));
+  let rawData: { text?: string; words?: WordTimestamp[] };
+  try {
+    rawData = JSON.parse(readFileSync(jsonPath, 'utf-8'));
+  } catch (err) {
+    throw new CliError(`Could not read transcript JSON ${jsonPath}: ${getErrorMessage(err)}`);
+  }
+
   const text = rawData.text || '';
-  const words: WordTimestamp[] = rawData.words || [];
-
+  const words = rawData.words ?? [];
   if (words.length === 0) {
-    logger.error('No words found in transcript JSON.');
-    process.exit(1);
+    throw new CliError(`No words found in transcript JSON: ${jsonPath}`);
   }
 
-  const maxClips = options.maxClips ? Number.parseInt(options.maxClips, 10) : 5;
-  const minDur = options.minDuration ? Number.parseFloat(options.minDuration) : 25;
-  const maxDur = options.maxDuration ? Number.parseFloat(options.maxDuration) : 60;
-
-  let clips: ClipHighlight[] = [];
-
-  const hasLlmKey = Boolean(options.apiKey || config.openAiApiKey);
-
-  if (options.keyword) {
-    logger.info(`Searching for moments matching keyword: "${options.keyword}"...`);
-    clips = findKeywordMoments(words, options.keyword, minDur, maxDur, maxClips);
-  } else if (!hasLlmKey && !options.baseUrl) {
-    logger.info(
-      'No LLM API key configured. Using heuristic density clustering for moments discovery.'
-    );
-    logger.info(`📄 Source Transcript File: ${jsonPath}`);
-    logger.info(
-      '💡 Autonomous Tip: You or an AI Agent can inspect this transcript file directly to choose moments, or export formatted text via: nouclip transcript <videoOrJson> -f txt'
-    );
-    clips = findHeuristicMoments(words, minDur, maxDur, maxClips);
-  } else {
-    try {
-      const llm = new LLMClient({
-        baseUrl: options.baseUrl,
-        apiKey: options.apiKey,
-        model: options.model
-      });
-      logger.info(
-        `Analyzing transcript for viral hooks using LLM (${options.model || config.openAiModel})...`
-      );
-      clips = await llm.findViralHooks(text, words, {
-        maxClips,
-        targetMinDuration: minDur,
-        targetMaxDuration: maxDur
-      });
-    } catch (err: any) {
-      logger.warn(`LLM analysis failed (${err.message}). Falling back to heuristic clustering...`);
-      logger.info(`📄 Source Transcript File: ${jsonPath}`);
-      logger.info(
-        '💡 Autonomous Tip: You or an AI Agent can inspect this transcript file directly to choose moments, or export formatted text via: nouclip transcript <videoOrJson> -f txt'
-      );
-      clips = findHeuristicMoments(words, minDur, maxDur, maxClips);
-    }
+  const maxClips = Math.floor(parseNumericOption(options.maxClips, '--max-clips', 5));
+  const minDur = parseNumericOption(options.minDuration, '--min-duration', 25);
+  const maxDur = parseNumericOption(options.maxDuration, '--max-duration', 60);
+  if (maxDur < minDur) {
+    throw new CliError('--max-duration must be greater than or equal to --min-duration.');
   }
+
+  const clips = await discoverClips(jsonPath, text, words, {
+    keyword: options.keyword,
+    baseUrl: options.baseUrl,
+    apiKey: options.apiKey,
+    model: options.model,
+    maxClips,
+    minDur,
+    maxDur
+  });
 
   if (clips.length === 0) {
     logger.warn('No clips found matching the given parameters.');
@@ -94,111 +91,88 @@ export async function highlightCommand(
   }
 
   logger.success(`Found ${clips.length} highlight recommendations:\n`);
-
-  clips.forEach((clip, idx) => {
-    const sMin = Math.floor(clip.start / 60);
-    const sSec = Math.floor(clip.start % 60);
-    const eMin = Math.floor(clip.end / 60);
-    const eSec = Math.floor(clip.end % 60);
-    const timeStr = `${sMin}m${sSec}s -> ${eMin}m${eSec}s (${clip.duration.toFixed(1)}s)`;
-
-    console.log(`${pc.bold(pc.cyan(`Clip #${idx + 1}: ${clip.title}`))} [${timeStr}]`);
-    console.log(`  🔥 Virality Score : ${pc.green(`${clip.viralityScore}/100`)}`);
-    console.log(`  🎯 Hook Quote     : ${pc.italic(`"${clip.hook}"`)}`);
-    console.log(`  💡 Reason         : ${pc.dim(clip.reason)}`);
-    console.log(
-      `  ⚡ Quick Clip Cmd : ${pc.yellow(
-        `nouclip auto <video> --start ${Math.round(clip.start)} --duration ${Math.round(clip.duration)}`
-      )}\n`
-    );
-  });
+  for (const [idx, clip] of clips.entries()) {
+    printClip(idx, clip);
+  }
 
   const outJson = options.output || `${jsonPath.replace(/\.json$/, '')}.highlights.json`;
   writeFileSync(outJson, JSON.stringify({ clips }, null, 2), 'utf-8');
   logger.info(`Saved highlight metadata to: ${outJson}`);
 }
 
-function findKeywordMoments(
-  words: WordTimestamp[],
-  keyword: string,
-  minDur: number,
-  maxDur: number,
-  maxClips: number
-): ClipHighlight[] {
-  const kwLower = keyword.toLowerCase();
-  const matchedIndices: number[] = [];
-
-  words.forEach((w, idx) => {
-    if (w.word.toLowerCase().includes(kwLower)) {
-      matchedIndices.push(idx);
-    }
-  });
-
-  const clips: ClipHighlight[] = [];
-  const usedRanges: { start: number; end: number }[] = [];
-
-  for (const idx of matchedIndices) {
-    if (clips.length >= maxClips) break;
-
-    const centerWord = words[idx];
-    const targetStart = Math.max(0, centerWord.start - 8);
-    const targetEnd = targetStart + Math.min(maxDur, Math.max(minDur, 40));
-
-    const startWord = words.find((w) => w.start >= targetStart) || words[0];
-    const endWord = words.find((w) => w.end >= targetEnd) || words[words.length - 1];
-
-    const isOverlap = usedRanges.some((r) => Math.abs(r.start - startWord.start) < 20);
-    if (isOverlap) continue;
-
-    const slice = words.filter((w) => w.start >= startWord.start && w.end <= endWord.end);
-    const textSnippet = slice.map((w) => w.word.trim()).join(' ');
-
-    usedRanges.push({ start: startWord.start, end: endWord.end });
-    clips.push({
-      title: `Highlight: ${keyword.toUpperCase()} Focus`,
-      hook: `${textSnippet.slice(0, 80)}...`,
-      start: round(startWord.start, 1),
-      end: round(endWord.end, 1),
-      duration: round(endWord.end - startWord.start, 1),
-      viralityScore: 90,
-      reason: `Direct keyword match on "${keyword}" with contextual buildup and punchline.`
-    });
-  }
-
-  return clips;
+interface DiscoveryParams {
+  keyword?: string;
+  baseUrl?: string;
+  apiKey?: string;
+  model?: string;
+  maxClips: number;
+  minDur: number;
+  maxDur: number;
 }
 
-function findHeuristicMoments(
+async function discoverClips(
+  jsonPath: string,
+  text: string,
   words: WordTimestamp[],
-  minDur: number,
-  maxDur: number,
-  maxClips: number
-): ClipHighlight[] {
-  const clips: ClipHighlight[] = [];
-  const step = Math.floor(words.length / (maxClips + 1));
+  opts: DiscoveryParams
+): Promise<ClipHighlight[]> {
+  const { maxClips, minDur, maxDur } = opts;
 
-  for (let i = 1; i <= maxClips; i++) {
-    const centerIdx = i * step;
-    const startWord = words[Math.max(0, centerIdx - 30)];
-    const endWord = words[Math.min(words.length - 1, centerIdx + 30)];
-    const slice = words.slice(Math.max(0, centerIdx - 30), Math.min(words.length, centerIdx + 30));
-    const textSnippet = slice.map((w) => w.word.trim()).join(' ');
-
-    clips.push({
-      title: `Moment Segment #${i}`,
-      hook: `${textSnippet.slice(0, 80)}...`,
-      start: round(startWord.start, 1),
-      end: round(endWord.end, 1),
-      duration: round(endWord.end - startWord.start, 1),
-      viralityScore: 85 - i * 2,
-      reason: 'High information density dialogue segment with complete thought structure.'
-    });
+  if (opts.keyword) {
+    logger.info(`Searching for moments matching keyword: "${opts.keyword}"...`);
+    return findKeywordMoments(words, opts.keyword, minDur, maxDur, maxClips);
   }
 
-  return clips;
+  const hasLlm = Boolean(opts.apiKey || opts.baseUrl || config.openAiLlmApiKey);
+  if (!hasLlm) {
+    logger.info(
+      'No LLM API key configured. Using heuristic density clustering for moments discovery.'
+    );
+    printAgentTip(jsonPath);
+    return findHeuristicMoments(words, minDur, maxDur, maxClips);
+  }
+
+  try {
+    const llm = new LLMClient({
+      baseUrl: opts.baseUrl,
+      apiKey: opts.apiKey,
+      model: opts.model
+    });
+    logger.info(
+      `Analyzing transcript for viral hooks using LLM (${opts.model || config.openAiLlmModel})...`
+    );
+    return await llm.findViralHooks(text, words, {
+      maxClips,
+      targetMinDuration: minDur,
+      targetMaxDuration: maxDur
+    });
+  } catch (err) {
+    logger.warn(
+      `LLM analysis failed (${getErrorMessage(err)}). Falling back to heuristic clustering...`
+    );
+    printAgentTip(jsonPath);
+    return findHeuristicMoments(words, minDur, maxDur, maxClips);
+  }
 }
 
-function round(val: number, decimals: number): number {
-  const factor = 10 ** decimals;
-  return Math.round(val * factor) / factor;
+function printAgentTip(jsonPath: string): void {
+  logger.info(`📄 Source Transcript File: ${jsonPath}`);
+  logger.info(
+    '💡 Autonomous Tip: You or an AI Agent can inspect this transcript file directly to choose moments, or export formatted text via: nouclip transcript <videoOrJson> -f txt'
+  );
+}
+
+function printClip(idx: number, clip: ClipHighlight): void {
+  const stamp = (sec: number) => `${Math.floor(sec / 60)}m${Math.floor(sec % 60)}s`;
+  const timeStr = `${stamp(clip.start)} -> ${stamp(clip.end)} (${clip.duration.toFixed(1)}s)`;
+
+  console.log(`${pc.bold(pc.cyan(`Clip #${idx + 1}: ${clip.title}`))} [${timeStr}]`);
+  console.log(`  🔥 Virality Score : ${pc.green(`${clip.viralityScore}/100`)}`);
+  console.log(`  🎯 Hook Quote     : ${pc.italic(`"${clip.hook}"`)}`);
+  console.log(`  💡 Reason         : ${pc.dim(clip.reason)}`);
+  console.log(
+    `  ⚡ Quick Clip Cmd : ${pc.yellow(
+      `nouclip auto <video> --start ${Math.round(clip.start)} --duration ${Math.round(clip.duration)}`
+    )}\n`
+  );
 }

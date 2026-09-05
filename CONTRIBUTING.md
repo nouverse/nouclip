@@ -66,17 +66,47 @@ nouclip --help
 
 ## 🧪 Testing
 
-We use Bun's built-in fast test runner. All unit tests live in `tests/`.
+We use Bun's built-in test runner. Tests live in `tests/`, mirroring the `src/` layout:
 
-```bash
-# Run all unit tests
-bun test
-
-# Run tests in watch mode during active development
-bun test --watch
+```
+tests/
+├── utils/      # time parsing, error helpers, path resolution
+├── core/       # ass, ffmpeg, config/env, selection, transcript, highlights, llm, whisper, youtube, workspace
+├── commands/   # CLI flag semantics (negatable flags, framing, numeric options)
+├── e2e/        # CLI smoke tests + real ffmpeg pipeline
+└── version.test.ts
 ```
 
-When writing new features, parsers, or filters, please add corresponding test cases under `tests/unit.test.ts`.
+```bash
+# Run everything
+bun test
+
+# Watch mode during active development
+bun test --watch
+
+# Coverage report
+bun run test:coverage
+
+# One command for the full gate (typecheck + lint + tests)
+bun run check
+```
+
+### Testing guidelines
+
+- **Keep logic pure and testable.** Argument construction, parsing and formatting live in
+  pure functions (`FFmpegRunner.buildReframeArgs`, `WhisperClient.normalizeResponse`,
+  `renderTranscript`, ...) so they can be asserted without spawning a process or hitting a network.
+- **Commands throw, they do not exit.** Commands raise `CliError`; `src/cli.ts` is the only place
+  that maps an error to an exit code. This keeps command logic unit-testable.
+- **Isolate the workspace.** Tests that touch the filesystem must use `mkdtempSync` and override
+  *all* `NOUCLIP_*_DIR` variables — a contributor's global `~/.nouclip/.env` may pin each directory
+  individually.
+- **ffmpeg tests self-skip.** `tests/e2e/pipeline.test.ts` runs against a generated `lavfi` clip and
+  skips when ffmpeg is missing locally. CI asserts ffmpeg is present, so the suite cannot silently
+  stop running there.
+
+When you add a feature, parser, or filter, add a matching test file under the directory that mirrors
+its source module.
 
 ---
 
@@ -87,17 +117,15 @@ We use **Biome** for lightning-fast linting/formatting and **TypeScript** for st
 Before submitting a Pull Request, run the full validation suite:
 
 ```bash
-# 1. Typecheck (0 errors required)
-bun run typecheck
+# Everything the CI gate runs, in one command
+bun run check
 
-# 2. Lint check
-bun run lint
-
-# 3. Auto-format code
-bun run format
-
-# 4. Verify cross-platform binary compilation
-bun run build:all
+# ...or step by step:
+bun run typecheck   # 1. Typecheck (0 errors required, covers src/ and tests/)
+bun run lint        # 2. Lint + format check
+bun run format      # 3. Auto-format code
+bun test            # 4. Unit + integration tests
+bun run build:all   # 5. Verify cross-platform binary compilation
 ```
 
 ### Code Style Rules:
@@ -120,6 +148,7 @@ nouclip/
 │   │   ├── cut.ts          # Video trimming & fast stream copy
 │   │   ├── download.ts     # YouTube yt-dlp downloader with caching
 │   │   ├── extract.ts      # Audio extraction & Whisper transcription
+│   │   ├── framing.ts      # Shared --mode/--blur/--center resolution
 │   │   ├── highlight.ts    # Heuristic & LLM virality moment finder
 │   │   ├── info.ts         # Workspace & service introspection
 │   │   ├── list.ts         # Asset cataloging (downloads, segments, transcripts)
@@ -127,13 +156,19 @@ nouclip/
 │   │   └── transcript.ts   # Transcript exporter (TXT, SRT, VTT, JSON)
 │   ├── core/               # Core engine modules
 │   │   ├── ass.ts          # Kinetic animated ASS subtitle generator
-│   │   ├── config.ts       # Environment variable loader & directory manager
-│   │   ├── ffmpeg.ts       # FFmpeg filter builder & process runner
+│   │   ├── config.ts       # Config getters & managed workspace directories
+│   │   ├── env.ts          # Dependency-free .env parser
+│   │   ├── ffmpeg.ts       # FFmpeg arg builders & process runner
+│   │   ├── highlights.ts   # Keyword & heuristic moment finders
 │   │   ├── llm.ts          # OpenAI-compatible LLM client
+│   │   ├── selection.ts    # Shared --range/--start/--end/--duration resolution
+│   │   ├── transcript.ts   # TXT/SRT/VTT renderers
 │   │   ├── whisper.ts      # OpenAI-compatible Whisper STT client
+│   │   ├── workspace.ts    # Asset listing & directory statistics
 │   │   └── youtube.ts      # yt-dlp wrapper & cache manager
-│   └── utils/              # Shared helpers (logger, path, time parsers)
-├── tests/                  # Unit test suite (bun:test)
+│   ├── utils/              # Shared helpers (logger, errors, path, time parsers)
+│   └── version.ts          # Runtime version (kept in sync by a test)
+├── tests/                  # Test suite (bun:test), mirroring src/
 ├── skills/                 # AI Agent operational skill definitions
 └── .github/workflows/      # GitHub Actions CI/CD workflows
 ```

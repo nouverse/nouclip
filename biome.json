@@ -7,7 +7,13 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "ignore": ["node_modules", "dist", "downloads"]
+    "ignore": [
+      "node_modules",
+      "dist",
+      "downloads",
+      ".nouclip",
+      "coverage"
+    ]
   },
   "formatter": {
     "enabled": true,

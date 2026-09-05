@@ -12,32 +12,87 @@ export interface TranscriptSegment {
   words: WordTimestamp[];
 }
 
+export interface KineticASSOptions {
+  fontSize?: number;
+  primaryColor?: string;
+  highlightColor?: string;
+  wordsPerGroup?: number;
+  /** Cap on how long the final word of a group stays on screen. */
+  maxWordDuration?: number;
+  /** Silence longer than this ends the current caption group. */
+  gapThreshold?: number;
+}
+
+export const ASS_DEFAULTS = {
+  fontSize: 62,
+  /** White */
+  primaryColor: '&H00FFFFFF',
+  /** Bright yellow / cyber amber */
+  highlightColor: '&H0000FFFF',
+  wordsPerGroup: 2,
+  maxWordDuration: 1.0,
+  gapThreshold: 0.4,
+  /** Floor so a very short word is still readable. */
+  minWordDuration: 0.3
+} as const;
+
 export class ASSGenerator {
+  /** Drops empty words and anything with unusable timings. */
+  static sanitizeWords(words: WordTimestamp[]): WordTimestamp[] {
+    return words.filter(
+      (w) =>
+        typeof w?.word === 'string' &&
+        w.word.trim().length > 0 &&
+        Number.isFinite(w.start) &&
+        Number.isFinite(w.end)
+    );
+  }
+
   /**
-   * Generates ASS (Advanced SubStation Alpha) subtitle file
-   * with kinetic highlighted words (active word turns yellow/cyber-amber with bounce).
-   *
-   * Features:
-   * - Lower-Third Alignment (bottom center, safe zone above TikTok/Reels UI)
-   * - Max word duration cap (1.2s max per word to prevent stuck lingering subtitles)
-   * - Silence gap handling (subtitles disappear during pauses > 0.4s)
+   * Chunks words into caption groups of at most `groupSize`,
+   * breaking early when the silence before the next word exceeds `gapThreshold`.
    */
-  static generateKineticASS(
+  static groupWords(
     words: WordTimestamp[],
-    options: {
-      fontSize?: number;
-      primaryColor?: string;
-      highlightColor?: string;
-      wordsPerGroup?: number;
-      maxWordDuration?: number;
-      gapThreshold?: number;
-    } = {}
-  ): string {
-    const fontSize = options.fontSize || 62;
-    const primaryColor = options.primaryColor || '&H00FFFFFF'; // White
-    const highlightColor = options.highlightColor || '&H0000FFFF'; // Bright Yellow / Cyber Amber
-    const maxWordDuration = options.maxWordDuration || 1.0; // Max duration to display an active word
-    const gapThreshold = options.gapThreshold || 0.4; // Silence threshold to hide subtitle
+    groupSize: number,
+    gapThreshold: number
+  ): WordTimestamp[][] {
+    const groups: WordTimestamp[][] = [];
+    let i = 0;
+
+    while (i < words.length) {
+      const group: WordTimestamp[] = [words[i]];
+      let nextIdx = i + 1;
+
+      while (nextIdx < words.length && group.length < groupSize) {
+        const prev = group[group.length - 1];
+        if (words[nextIdx].start - prev.end > gapThreshold) break;
+        group.push(words[nextIdx]);
+        nextIdx++;
+      }
+
+      groups.push(group);
+      i = nextIdx;
+    }
+
+    return groups;
+  }
+
+  /**
+   * Generates an ASS (Advanced SubStation Alpha) subtitle script with kinetic
+   * word highlighting — the active word turns amber and bounces.
+   *
+   * - Lower-third alignment, above the TikTok/Reels UI safe zone
+   * - Active words are capped so captions never linger through a pause
+   * - Groups break on silence so captions disappear during gaps
+   */
+  static generateKineticASS(words: WordTimestamp[], options: KineticASSOptions = {}): string {
+    const fontSize = options.fontSize || ASS_DEFAULTS.fontSize;
+    const primaryColor = options.primaryColor || ASS_DEFAULTS.primaryColor;
+    const highlightColor = options.highlightColor || ASS_DEFAULTS.highlightColor;
+    const maxWordDuration = options.maxWordDuration || ASS_DEFAULTS.maxWordDuration;
+    const gapThreshold = options.gapThreshold || ASS_DEFAULTS.gapThreshold;
+    const groupSize = options.wordsPerGroup || ASS_DEFAULTS.wordsPerGroup;
 
     const header = `[Script Info]
 ScriptType: v4.00+
@@ -53,51 +108,25 @@ Style: KineticTitle, Arial Black, ${fontSize}, ${primaryColor}, &H000000FF, &H00
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
 
-    // Filter out invalid/empty words
-    const cleanWords = words.filter((w) => w.word && w.word.trim().length > 0);
-    const groupSize = options.wordsPerGroup || 2;
+    const cleanWords = ASSGenerator.sanitizeWords(words);
     const lines: string[] = [];
 
-    let i = 0;
-    while (i < cleanWords.length) {
-      // Build group of words, breaking early if there's a long pause (> gapThreshold)
-      const group: WordTimestamp[] = [cleanWords[i]];
-      let nextIdx = i + 1;
-
-      while (nextIdx < cleanWords.length && group.length < groupSize) {
-        const prevWord = group[group.length - 1];
-        const nextWord = cleanWords[nextIdx];
-        if (nextWord.start - prevWord.end > gapThreshold) {
-          // Pause detected, end group here
-          break;
-        }
-        group.push(nextWord);
-        nextIdx++;
-      }
-
-      // Generate dialogue entries for each active word in this group
+    for (const group of ASSGenerator.groupWords(cleanWords, groupSize, gapThreshold)) {
       for (let j = 0; j < group.length; j++) {
         const activeWord = group[j];
         const startTime = activeWord.start;
 
-        // Calculate end time: cap long trailing pauses
-        let endTime = activeWord.end;
-        if (j < group.length - 1) {
-          endTime = group[j + 1].start;
-        } else {
-          // Last word in group: cap to maxWordDuration
-          endTime = Math.min(endTime, startTime + maxWordDuration);
-        }
+        // Hold until the next word starts; cap the trailing word so it does not
+        // linger across a pause.
+        let endTime =
+          j < group.length - 1
+            ? group[j + 1].start
+            : Math.min(activeWord.end, startTime + maxWordDuration);
 
-        // Ensure minimum visibility of 0.25s and valid range
         if (endTime <= startTime) {
-          endTime = startTime + 0.3;
+          endTime = startTime + ASS_DEFAULTS.minWordDuration;
         }
 
-        const startStr = ASSGenerator.formatTime(startTime);
-        const endStr = ASSGenerator.formatTime(endTime);
-
-        // Build text with active word pop
         const textParts = group.map((w, idx) => {
           const cleanText = w.word.trim().toUpperCase().replace(/[{}]/g, '');
           if (idx === j) {
@@ -106,27 +135,30 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           return `{\\c${primaryColor}}${cleanText}{\\r}`;
         });
 
-        const dialogue = `Dialogue: 0,${startStr},${endStr},KineticTitle,,0,0,0,,${textParts.join(' ')}`;
-        lines.push(dialogue);
+        lines.push(
+          `Dialogue: 0,${ASSGenerator.formatTime(startTime)},${ASSGenerator.formatTime(endTime)},KineticTitle,,0,0,0,,${textParts.join(' ')}`
+        );
       }
-
-      i = nextIdx;
     }
 
     return `${header + lines.join('\n')}\n`;
   }
 
+  /** ASS timestamp: `H:MM:SS.cc`. */
   static formatTime(seconds: number): string {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-    const cs = Math.floor((seconds % 1) * 100);
+    const total = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
 
-    const h = hrs.toString();
-    const m = mins.toString().padStart(2, '0');
-    const s = secs.toString().padStart(2, '0');
-    const c = cs.toString().padStart(2, '0');
+    // Round to centiseconds first: deriving fields from `total % 1` turns
+    // 5.3 into 5.29 because of binary floating point.
+    const totalCs = Math.round(total * 100);
+    const cs = totalCs % 100;
+    const totalSecs = (totalCs - cs) / 100;
 
-    return `${h}:${m}:${s}.${c}`;
+    const hrs = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${hrs}:${pad(mins)}:${pad(secs)}.${pad(cs)}`;
   }
 }

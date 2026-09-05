@@ -9,9 +9,13 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
-    name: Typecheck & Lint
+    name: Typecheck, Lint & Test
     runs-on: ubuntu-latest
 
     steps:
@@ -24,10 +28,21 @@ jobs:
           bun-version: latest
 
       - name: Install Dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
 
-      - name: Run Quality Checks & Unit Tests
-        run: |
-          bun run typecheck
-          bun run lint
-          bun test
+      - name: Verify FFmpeg is available
+        # Integration tests self-skip without it; fail loudly instead so the
+        # ffmpeg-backed suite never silently stops running in CI.
+        run: ffmpeg -version && ffprobe -version
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint & Format Check
+        run: bun run lint
+
+      - name: Unit & Integration Tests
+        run: bun test
+
+      - name: Build
+        run: bun run build:js
