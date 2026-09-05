@@ -30,6 +30,9 @@ jobs:
       - name: Install Dependencies
         run: bun install --frozen-lockfile
 
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Verify FFmpeg is available
         # Integration tests self-skip without it; fail loudly instead so the
         # ffmpeg-backed suite never silently stops running in CI.
