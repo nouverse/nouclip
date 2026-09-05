@@ -175,17 +175,17 @@ Read and correct any typos in the `.ass` file:
 ```
 
 ### Step 3: Present Draft & Await User Confirmation
-Show the clip proposal and transcript draft to the user:
+Show the clip proposal and transcript draft to the user in your natural conversational voice/language (the following is an illustrative example):
 ```text
-"Draft video & subtitle sudah siap (13:25 - 14:10):
-- Highlight Hook: 'Kenapa kita beralih ke Hono...'
+"Draft clip & subtitles are ready (13:25 - 14:10):
+- Hook / Topic: 'Why we migrated to Hono...'
 - Style: Hormozi (Neon Green highlight)
-- Silence Trim: Aktif
-- BGM: lofi_music.mp3 (Ducking aktif)
+- Silence Trim: Enabled (>0.6s excised)
+- BGM: lofi_beat.mp3 (Sidechain ducking active)
 
-Apakah klip ini siap di-render ke final MP4?"
+Ready to proceed with final rendering?"
 ```
-**STOP and wait for the user to confirm. DO NOT proceed to Step 4 until approved.**
+**CRITICAL:** Present the plan in your natural voice, and **STOP to wait for explicit user confirmation**. DO NOT proceed to Step 4 until approved.
 
 ### Step 4: Burn Verified Subtitles into Final Video (After Approval)
 ```bash
