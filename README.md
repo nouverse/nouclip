@@ -10,7 +10,7 @@
 [![Trakteer](https://img.shields.io/badge/Trakteer-Dukung%20Kreator-red.svg)](https://trakteer.id/gadingnst)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20a%20Coffee-29abe0.svg?logo=ko-fi)](https://ko-fi.com/gadingnst)
 
-An **agentic-first CLI tool** for video cutting, aspect ratio reframing, Whisper transcription, and animated kinetic subtitles.
+An **agentic-first CLI tool** for video cutting, aspect ratio reframing, Whisper transcription, animated kinetic subtitles, smart audio ducking, and auto silence trimming.
 
 Designed for automated workflows, AI agent harnesses, and power users who need deterministic, scriptable video operations with persistent artifact caching.
 
@@ -22,9 +22,15 @@ Designed for automated workflows, AI agent harnesses, and power users who need d
 - 📦 **Zero-Waste Artifact Management:** Downloaded raw videos, audio WAVs, word-level Whisper transcripts (`.json`), and styled ASS subtitle files are preserved in dedicated folders rather than deleted silently.
 - ⏱️ **Human & Agent Timestamps:** Supports flexible range syntaxes like `--range 13:25-14:50`, `01:13:25`, `85s`, and `13m25s`.
 - 📐 **Universal Aspect Reframing:** Converts videos to any aspect ratio (`9:16`, `1:1`, `4:5`, `16:9`, or custom `W:H`) with multiple framing modes (`blur`, `center`, `pad`, `stretch`).
+- 🎨 **Typography Presets (`--style`):** Instant subtitle styling presets:
+  - `hormozi`: Bold all-caps, neon green active-word highlight (`&H0000FF00`), pop zoom scaling (118%), thick outline.
+  - `storyteller`: Clean natural-case, soft cyan active-word highlight (`&H0050E3C2`), thin outline.
+  - `cinematic`: Wide tracking, golden amber highlight (`&H0000A5FF`).
+  - `default`: Classic yellow highlight.
+- ✂️ **Silence & Pause Trimming (`--silence-trim`):** Reads Whisper word timestamps to automatically cut silent pauses (`>0.6s`), concatenating speech seamlessly and auto-shifting subtitle timestamps.
+- 🎵 **Smart BGM & Sidechain Ducking (`--bgm`):** Auto-loops background music and dynamically ducks/lowers BGM volume when speech is active (`sidechaincompress` + `amix`).
 - ✍️ **Draft & Staged Workflow (`--draft` / `--no-burn`):** Cuts and prepares transcript/ASS files for human or agent review before burning subtitles into the final video.
 - 🎙️ **GPU STT Integration:** Directly integrates with local GPU endpoints like **[Voice Compute](https://github.com/nouverse/voice-compute)** or any OpenAI-compatible Whisper API.
-- ✨ **Animated Kinetic Subtitles:** Dynamic ASS subtitles where active words bounce and change color in sync with speech.
 
 ---
 
@@ -36,8 +42,8 @@ NouClip organizes all assets in a structured workspace (defaults to `~/.nouclip`
 ~/.nouclip/
 ├── downloads/        # Cached source/YouTube videos (never re-downloaded twice)
 ├── transcripts/      # Whisper JSON transcripts (*.whisper.json) and ASS scripts (*.ass)
-├── segments/         # Raw cut segments and reframed video files
-└── output/           # Final rendered videos with burned subtitles
+├── segments/         # Raw cut segments, trimmed audio/video, and reframed files
+└── output/           # Final rendered videos with burned subtitles & mixed BGM
 ```
 
 Run `nouclip info` anytime to inspect current paths, file counts, and storage usage.
@@ -153,8 +159,17 @@ nouclip list output
 Downloads (or reuses cache), cuts segment, reframes to vertical, transcribes with Whisper, and burns kinetic subtitles:
 
 ```bash
-# From YouTube URL using timestamp range (9:16 blurred background with kinetic subtitles)
+# Standard automated short (9:16 blurred background with kinetic subtitles)
 nouclip auto "https://youtu.be/EXAMPLE_ID" --range 13:25-14:10
+
+# Power Creator Setup: Hormozi Typography + Silence Trimming + Background Music
+nouclip auto podcast.mp4 \
+  --range 01:20-02:00 \
+  --style hormozi \
+  --silence-trim \
+  --bgm "lofi_track.mp3" \
+  --bgm-volume 0.10 \
+  -o out/viral_short.mp4
 
 # Clean Framing Only (0 subtitles — for video editors & post-production)
 nouclip auto "https://youtu.be/EXAMPLE_ID" --range 13:25-14:10 --no-subtitles -o clean_short.mp4
@@ -171,17 +186,18 @@ If you want to review and correct subtitle typos before rendering the final vide
 
 ```bash
 # Step 1: Generate segment + transcript without burning
-nouclip auto "https://youtu.be/EXAMPLE_ID" --range 13:25-14:10 --draft
+nouclip auto "https://youtu.be/EXAMPLE_ID" --range 13:25-14:10 --style hormozi --draft
 
 # Output:
-# 📹 Video Segment  : ~/.nouclip/segments/video_framed_9x16_center.mp4
+# 📹 Video Segment  : ~/.nouclip/segments/video_framed_9x16_blur.mp4
 # 📝 Subtitle Script: ~/.nouclip/transcripts/video_13m25s-14m10s.ass
 
 # Step 2: Open and edit the .ass file in any text editor
 
-# Step 3: Burn the verified subtitles
-nouclip subtitle ~/.nouclip/segments/video_framed_9x16_center.mp4 \
+# Step 3: Burn the verified subtitles & mix BGM
+nouclip subtitle ~/.nouclip/segments/video_framed_9x16_blur.mp4 \
   --sub ~/.nouclip/transcripts/video_13m25s-14m10s.ass \
+  --bgm "lofi_track.mp3" \
   -o ~/.nouclip/output/final_short.mp4
 ```
 
@@ -199,48 +215,37 @@ nouclip cut input.mp4 --range 13:25-14:10
 # 9:16 Vertical with blurred background fill
 nouclip crop input.mp4 --aspect 9:16 --mode blur
 
-# 1:1 Square with center crop
+# 1:1 Square with center crop fill
 nouclip crop input.mp4 --aspect 1:1 --mode center
-
-# 4:5 Portrait with black letterbox
-nouclip crop input.mp4 --aspect 4:5 --mode pad
 ```
 
-#### Extract Audio & Generate Whisper Transcript
+#### Extract Audio & Whisper Transcribe
 ```bash
-nouclip extract input.mp4 --lang id
+nouclip extract input.mp4 --lang id --format json
 ```
 
-#### Export Transcript (SRT / VTT / TXT)
+#### Burn Subtitles & Mix Audio
 ```bash
-nouclip transcript input.mp4 --format srt -o sub.srt
-nouclip transcript input.mp4 --format txt -o speech.txt
+nouclip subtitle input.mp4 --sub captions.ass --bgm music.mp3 --bgm-volume 0.10 -o final.mp4
 ```
 
 ---
 
-## 🏗️ Cross-Compiling Standalone Binaries
+## 🧪 Testing & CI
 
-Compile binaries for all supported platforms:
+NouClip comes with an extensive unit and E2E test suite running across macOS, Linux, and Windows:
 
 ```bash
-bun run build:all
+# Run all tests
+bun test
 
-# Or build platform-specific:
-bun run build:linux          # dist/nouclip-linux-x64
-bun run build:darwin-arm64   # dist/nouclip-darwin-arm64
-bun run build:darwin-x64     # dist/nouclip-darwin-x64
-bun run build:win            # dist/nouclip-windows-x64.exe
+# Typecheck & Lint
+bun run typecheck
+bun run lint
 ```
-
----
-
-## 🔗 Related Repositories
-
-- **[nouverse/voice-compute](https://github.com/nouverse/voice-compute)** — Local GPU STT/TTS compute engine (Whisper Large-v3, F5-TTS, Edge-TTS).
 
 ---
 
 ## 📄 License
 
-Distributed under the **MIT License**.
+MIT © [Nouverse Technologies](https://nouverse.tech) & [Gadingnst](https://gading.dev)
