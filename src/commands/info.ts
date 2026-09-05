@@ -59,7 +59,7 @@ export async function infoCommand(options: { json?: boolean }) {
       }
     },
     services: {
-      voiceComputeUrl: config.voiceComputeUrl || 'http://localhost:8880 (default)',
+      whisperComputeUrl: config.whisperComputeUrl || 'http://localhost:8880 (default)',
       openAiBaseUrl: config.openAiBaseUrl,
       openAiModel: config.openAiModel,
       ffmpegPath: config.ffmpegPath || 'system PATH',
@@ -91,7 +91,7 @@ export async function infoCommand(options: { json?: boolean }) {
 
   console.log('🔌 Connected Services:');
   console.log(
-    `  • STT Whisper (Voice Compute) : ${config.voiceComputeUrl || 'http://localhost:8880 (default)'}`
+    `  • STT Whisper (Voice Compute) : ${config.whisperComputeUrl || 'http://localhost:8880 (default)'}`
   );
   console.log(`  • Optional LLM Endpoint       : ${config.openAiBaseUrl} (${config.openAiModel})`);
   console.log('');

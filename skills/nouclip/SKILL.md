@@ -173,9 +173,9 @@ NOUCLIP_DOWNLOAD_DIR=~/.nouclip/downloads
 NOUCLIP_TRANSCRIPT_DIR=~/.nouclip/transcripts
 NOUCLIP_OUTPUT_DIR=~/.nouclip/output
 
-# STT Whisper API Endpoint (Voice Compute or OpenAI)
-NOUCLIP_VOICE_COMPUTE_URL=http://localhost:8880
-NOUCLIP_VOICE_COMPUTE_API_KEY=
+# STT Whisper API Endpoint (Local Voice Compute or Cloud OpenAI/Groq)
+NOUCLIP_WHISPER_COMPUTE_URL=http://localhost:8880
+NOUCLIP_WHISPER_COMPUTE_API_KEY=
 
 # Optional LLM API Endpoint
 NOUCLIP_OPENAI_BASE_URL=https://api.openai.com/v1

@@ -116,21 +116,33 @@ export const config = {
     }
   },
 
-  // Voice Compute / Whisper STT
-  get voiceComputeUrl(): string | undefined {
+  // Whisper STT Endpoint
+  get whisperComputeUrl(): string | undefined {
     return (
+      process.env.NOUCLIP_WHISPER_COMPUTE_URL ||
       process.env.NOUCLIP_VOICE_COMPUTE_URL ||
+      process.env.WHISPER_COMPUTE_URL ||
       process.env.VOICE_COMPUTE_URL ||
       process.env.WHISPER_API_URL
     );
   },
 
-  get voiceComputeApiKey(): string | undefined {
+  get whisperComputeApiKey(): string | undefined {
     return (
+      process.env.NOUCLIP_WHISPER_COMPUTE_API_KEY ||
       process.env.NOUCLIP_VOICE_COMPUTE_API_KEY ||
+      process.env.WHISPER_COMPUTE_API_KEY ||
       process.env.VOICE_COMPUTE_API_KEY ||
       process.env.WHISPER_API_KEY
     );
+  },
+
+  get voiceComputeUrl(): string | undefined {
+    return this.whisperComputeUrl;
+  },
+
+  get voiceComputeApiKey(): string | undefined {
+    return this.whisperComputeApiKey;
   },
 
   // LLM OpenAI-Compatible Endpoint (Optional)
