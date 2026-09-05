@@ -277,4 +277,49 @@ nouclip extract <video> [options]
 nouclip transcript <videoOrJson> [options]
   -f, --format <format>     Export format: txt, srt, vtt, json (default: txt)
   -l, --lang <lang>         Language (default: "id")
+  -o, --output <path>       Output file path
 ```
+
+---
+
+## ⚙️ Environment Variables & Agent E2E Setup
+
+NouClip automatically loads configuration from `~/.nouclip/.env` (global) and `./.env` (local directory). Existing environment variables take precedence.
+
+### Quick E2E Setup for Agents
+If setting up a fresh environment for NouClip, create the configuration file:
+
+```bash
+mkdir -p ~/.nouclip
+cat << 'EOF' > ~/.nouclip/.env
+# Whisper STT Engine (Local Voice Compute or Remote OpenAI/Groq)
+NOUCLIP_OPENAI_AUDIO_URL=http://localhost:8880
+NOUCLIP_OPENAI_AUDIO_API_KEY=
+NOUCLIP_OPENAI_AUDIO_MODEL=large-v3
+
+# Optional LLM Analysis Engine
+NOUCLIP_OPENAI_LLM_URL=https://api.openai.com/v1
+NOUCLIP_OPENAI_LLM_API_KEY=your_openai_api_key
+NOUCLIP_OPENAI_LLM_MODEL=gpt-4o-mini
+EOF
+```
+
+### Complete Environment Variables Reference Table
+
+| Variable Name | Fallback Key | Default Value | Description |
+|---|---|---|---|
+| `NOUCLIP_WORKSPACE_DIR` | - | `~/.nouclip` | Root workspace for all cached artifacts & logs |
+| `NOUCLIP_DOWNLOAD_DIR` | - | `~/.nouclip/downloads` | Storage directory for downloaded videos |
+| `NOUCLIP_TRANSCRIPT_DIR` | - | `~/.nouclip/transcripts` | Storage for Whisper JSON & ASS subtitle scripts |
+| `NOUCLIP_SEGMENT_DIR` | - | `~/.nouclip/segments` | Storage for cropped segments & reframed intermediate MP4s |
+| `NOUCLIP_OUTPUT_DIR` | - | `~/.nouclip/output` | Destination for final rendered videos |
+| `NOUCLIP_OPENAI_AUDIO_URL` | `OPENAI_AUDIO_URL` | `http://localhost:8880` | Endpoint for Whisper STT `/v1/audio/transcriptions` |
+| `NOUCLIP_OPENAI_AUDIO_API_KEY` | `OPENAI_AUDIO_API_KEY` | *(empty)* | Bearer token / API key for Whisper endpoint |
+| `NOUCLIP_OPENAI_AUDIO_MODEL` | `OPENAI_AUDIO_MODEL` | `large-v3` | Whisper model name |
+| `NOUCLIP_OPENAI_LLM_URL` | `OPENAI_LLM_URL` | `https://api.openai.com/v1` | OpenAI-compatible endpoint for moment analysis |
+| `NOUCLIP_OPENAI_LLM_API_KEY` | `OPENAI_LLM_API_KEY` | *(empty)* | API key for LLM endpoint |
+| `NOUCLIP_OPENAI_LLM_MODEL` | `OPENAI_LLM_MODEL` | `gpt-4o-mini` | LLM model for heuristic moment extraction |
+| `NOUCLIP_FFMPEG_PATH` | `FFMPEG_PATH` | `ffmpeg` on PATH | Custom path to FFmpeg binary |
+| `NOUCLIP_FFPROBE_PATH` | `FFPROBE_PATH` | `ffprobe` on PATH | Custom path to FFprobe binary |
+| `NOUCLIP_YTDLP_PATH` | `YTDLP_PATH` | `yt-dlp` on PATH | Custom path to yt-dlp binary |
+
