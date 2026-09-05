@@ -11,6 +11,7 @@ export async function cropCommand(
     aspect?: string;
     mode?: FramingMode;
     blur?: boolean;
+    center?: boolean;
     output?: string;
   }
 ) {
@@ -22,7 +23,11 @@ export async function cropCommand(
   }
 
   const aspectStr = options.aspect || '9:16';
-  const mode: FramingMode = options.blur ? 'blur' : options.mode || 'center';
+  const mode: FramingMode = options.center
+    ? 'center'
+    : options.blur
+      ? 'blur'
+      : options.mode || 'blur';
   const preset = FFmpegRunner.parseAspectRatio(aspectStr);
   const baseName = basename(input, extname(input));
 

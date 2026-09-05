@@ -50,10 +50,21 @@ NouClip supports flexible time formats across all clipping commands:
 | `4:3` | 1440x1080 | Classic standard definition |
 
 ### Framing Styles (`--mode`)
-- `--mode blur` *(or `--blur`)*: Scales and heavily blurs background video, overlays clean centered foreground. Ideal for podcasts and screen-shares.
-- `--mode center`: Full-bleed zoom and center crop to fill the entire target canvas.
+- `--mode blur` *(default, or `--blur`)*: Scales and heavily blurs background video, overlays clean centered foreground. Ideal for podcasts and screen-shares.
+- `--mode center` *(or `--center`)*: Full-bleed zoom and center crop to fill the entire target canvas.
 - `--mode pad`: Letterbox / pillarbox with black padding bars.
 - `--mode stretch`: Scales directly without maintaining source aspect ratio.
+
+---
+
+## ✂️ Clean Framing / Video Trimming (0 Subtitles for Video Editors)
+
+If video editors or downstream tools want to do their own post-production and typography, pass `--no-subtitles` (or `--no-subs`):
+
+```bash
+# Cuts segment and reframes to 9:16 blurred background with zero subtitles
+nouclip auto video.mp4 --range 01:35-02:10 --aspect 9:16 --no-subtitles -o clean_clip.mp4
+```
 
 ---
 

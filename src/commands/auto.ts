@@ -1,4 +1,4 @@
-import { existsSync, unlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
 import { ASSGenerator } from '@/core/ass';
 import { config } from '@/core/config';
@@ -19,68 +19,81 @@ export interface AutoCommandOptions {
   aspect?: string;
   mode?: FramingMode;
   blur?: boolean;
+  center?: boolean;
   lang?: string;
   fontSize?: string;
   primaryColor?: string;
   highlightColor?: string;
   draft?: boolean;
   noBurn?: boolean;
+  subtitles?: boolean;
+  noSubtitles?: boolean;
+  noSubs?: boolean;
+  noSubtitle?: boolean;
   output?: string;
   downloadDir?: string;
   outputDir?: string;
   keepTemp?: boolean;
 }
 
-export async function autoCommand(videoPathOrUrl: string, options: AutoCommandOptions) {
+export async function autoCommand(videoOrUrl: string, options: AutoCommandOptions) {
   config.ensureDirs();
-  logger.banner();
-
-  let input = videoPathOrUrl;
-  const isYt = YouTubeDownloader.isYouTubeUrl(videoPathOrUrl);
-
-  if (isYt) {
-    logger.info('YouTube URL detected. Checking cache / downloading...');
-    const outDir = options.downloadDir ? resolve(options.downloadDir) : config.downloadDir;
-    input = await YouTubeDownloader.download(videoPathOrUrl, { outputDir: outDir });
-  } else {
-    input = resolveMediaInput(videoPathOrUrl);
-    if (!existsSync(input)) {
-      logger.error(`Video file not found: ${videoPathOrUrl} (Checked: ${input})`);
-      process.exit(1);
-    }
-  }
-
-  const baseName = basename(input, extname(input));
   const tempFiles: string[] = [];
 
   try {
-    let workingVideo = input;
+    logger.banner();
+
+    // 1. Download if URL or Resolve Input File
+    let input: string;
+    if (YouTubeDownloader.isYouTubeUrl(videoOrUrl)) {
+      logger.info(`Detected YouTube URL: ${videoOrUrl}`);
+      input = await YouTubeDownloader.download(videoOrUrl, {
+        outputDir: options.downloadDir || config.downloadDir
+      });
+    } else {
+      input = resolveMediaInput(videoOrUrl);
+      if (!existsSync(input)) {
+        logger.error(`File not found: ${videoOrUrl} (Checked: ${input})`);
+        process.exit(1);
+      }
+    }
+
+    const baseName = basename(input, extname(input));
+
+    // Calculate Cut Ranges
     let startSec = 0;
     let durSec = 0;
     let hasCut = false;
 
-    // 1. Resolve Time Range
     if (options.range) {
       const parsed = parseRange(options.range);
       startSec = parsed.start;
       durSec = parsed.duration;
       hasCut = true;
-    } else if (options.start || options.from) {
+    } else if (options.start || options.from || options.end || options.to || options.duration) {
       startSec = parseTimestamp(options.start || options.from);
       if (options.duration) {
         durSec = parseTimestamp(options.duration);
       } else if (options.end || options.to) {
         durSec = parseTimestamp(options.end || options.to) - startSec;
-      } else {
-        durSec = 30; // default 30s
       }
-      hasCut = true;
+      hasCut = durSec > 0;
     }
 
+    const skipSubtitles =
+      options.subtitles === false ||
+      Boolean(options.noSubtitles) ||
+      Boolean(options.noSubs) ||
+      Boolean(options.noSubtitle);
+
+    const totalSteps = skipSubtitles ? (hasCut ? 2 : 1) : hasCut ? 4 : 3;
+    let currentStep = 1;
+
+    let workingVideo = input;
     if (hasCut) {
       logger.step(
-        1,
-        4,
+        currentStep++,
+        totalSteps,
         `Cutting segment: ${formatSecondsToTimestamp(startSec)} -> ${formatSecondsToTimestamp(startSec + durSec)} (${Math.round(durSec)}s)...`
       );
       const cutOut = join(
@@ -93,14 +106,18 @@ export async function autoCommand(videoPathOrUrl: string, options: AutoCommandOp
       logger.success(`Clipped to: ${cutOut}`);
     }
 
-    // 2. Reframe Aspect Ratio & Mode
+    // 2. Reframe Aspect Ratio & Mode (Default: blur)
     const aspectStr = options.aspect || '9:16';
-    const framingMode: FramingMode = options.blur ? 'blur' : options.mode || 'center';
+    const framingMode: FramingMode = options.center
+      ? 'center'
+      : options.blur
+        ? 'blur'
+        : options.mode || 'blur';
     const aspectPreset = FFmpegRunner.parseAspectRatio(aspectStr);
 
     logger.step(
-      2,
-      4,
+      currentStep++,
+      totalSteps,
       `Reframing to aspect ${aspectPreset.name} (${aspectPreset.width}x${aspectPreset.height}, mode=${framingMode})...`
     );
 
@@ -116,15 +133,36 @@ export async function autoCommand(videoPathOrUrl: string, options: AutoCommandOp
     tempFiles.push(framedOut);
     logger.success(`Framed video ready: ${framedOut}`);
 
-    // 3. Audio extraction & Whisper transcription
-    logger.step(3, 4, 'Extracting audio & generating word timestamps with Whisper...');
-    const tempWav = join(config.segmentDir, `${baseName}_audio.temp.wav`);
-    await FFmpegRunner.extractAudio(framedOut, tempWav);
-    tempFiles.push(tempWav);
-
+    // 3. Early Exit if Subtitles are disabled (Clean Video Only)
     const transcriptBase = hasCut
       ? `${baseName}_${Math.round(startSec)}s-${Math.round(startSec + durSec)}s`
       : baseName;
+    const finalDir = options.outputDir ? resolve(options.outputDir) : config.outputDir;
+
+    if (skipSubtitles) {
+      const finalOutput = options.output
+        ? resolve(options.output)
+        : join(finalDir, `${transcriptBase}_${aspectPreset.name.replace(':', 'x')}_clean.mp4`);
+
+      if (resolve(framedOut) !== resolve(finalOutput)) {
+        copyFileSync(framedOut, finalOutput);
+      }
+
+      console.log('');
+      logger.success('🎉 Clean framing complete (0 subtitles)! Video saved to:');
+      console.log(`👉 ${finalOutput}`);
+      return;
+    }
+
+    // 4. Audio extraction & Whisper transcription
+    logger.step(
+      currentStep++,
+      totalSteps,
+      'Extracting audio & generating word timestamps with Whisper...'
+    );
+    const tempWav = join(config.segmentDir, `${baseName}_audio.temp.wav`);
+    await FFmpegRunner.extractAudio(framedOut, tempWav);
+    tempFiles.push(tempWav);
 
     const transcriptJsonPath = join(config.transcriptDir, `${transcriptBase}.whisper.json`);
     const assPath = join(config.transcriptDir, `${transcriptBase}.ass`);
@@ -138,7 +176,7 @@ export async function autoCommand(videoPathOrUrl: string, options: AutoCommandOp
       `Transcription ready: ${whisperRes.words.length} words -> ${transcriptJsonPath}`
     );
 
-    // 4. Generate Kinetic Subtitles ASS
+    // 5. Generate Kinetic Subtitles ASS
     const assContent = ASSGenerator.generateKineticASS(whisperRes.words, {
       fontSize: options.fontSize ? Number.parseInt(options.fontSize, 10) : 60,
       primaryColor: options.primaryColor,
@@ -147,7 +185,7 @@ export async function autoCommand(videoPathOrUrl: string, options: AutoCommandOp
     writeFileSync(assPath, assContent, 'utf-8');
     logger.success(`Subtitle script generated: ${assPath}`);
 
-    // 5. Handle Draft / Review Mode
+    // 6. Handle Draft / Review Mode
     const isDraft = options.draft || options.noBurn;
     if (isDraft) {
       console.log('');
@@ -165,9 +203,12 @@ export async function autoCommand(videoPathOrUrl: string, options: AutoCommandOp
       return;
     }
 
-    // 6. Burn animated kinetic subtitles
-    logger.step(4, 4, 'Burning animated kinetic typography into final video...');
-    const finalDir = options.outputDir ? resolve(options.outputDir) : config.outputDir;
+    // 7. Burn animated kinetic subtitles
+    logger.step(
+      currentStep++,
+      totalSteps,
+      'Burning animated kinetic typography into final video...'
+    );
     const finalOutput = options.output
       ? resolve(options.output)
       : join(finalDir, `${transcriptBase}_short.mp4`);

@@ -112,14 +112,15 @@ NOUCLIP_DOWNLOAD_DIR=~/.nouclip/downloads
 NOUCLIP_TRANSCRIPT_DIR=~/.nouclip/transcripts
 NOUCLIP_OUTPUT_DIR=~/.nouclip/output
 
-# STT Whisper Endpoint (Local Voice Compute or Remote OpenAI)
-NOUCLIP_VOICE_COMPUTE_URL=http://localhost:8880
-NOUCLIP_VOICE_COMPUTE_API_KEY=
+# STT Whisper / Audio Endpoint (Local voice-compute or Cloud OpenAI/Groq)
+NOUCLIP_OPENAI_AUDIO_URL=http://localhost:8880
+NOUCLIP_OPENAI_AUDIO_API_KEY=
+NOUCLIP_OPENAI_AUDIO_MODEL=large-v3
 
 # LLM Endpoint (Optional — for automated highlight suggestion)
-NOUCLIP_OPENAI_BASE_URL=https://api.openai.com/v1
-NOUCLIP_OPENAI_API_KEY=
-NOUCLIP_OPENAI_MODEL=gpt-4o-mini
+NOUCLIP_OPENAI_LLM_URL=https://api.openai.com/v1
+NOUCLIP_OPENAI_LLM_API_KEY=
+NOUCLIP_OPENAI_LLM_MODEL=gpt-4o-mini
 ```
 
 ---
@@ -152,8 +153,11 @@ nouclip list output
 Downloads (or reuses cache), cuts segment, reframes to vertical, transcribes with Whisper, and burns kinetic subtitles:
 
 ```bash
-# From YouTube URL using timestamp range
-nouclip auto "https://youtu.be/EXAMPLE_ID" --range 13:25-14:10 --blur
+# From YouTube URL using timestamp range (9:16 blurred background with kinetic subtitles)
+nouclip auto "https://youtu.be/EXAMPLE_ID" --range 13:25-14:10
+
+# Clean Framing Only (0 subtitles — for video editors & post-production)
+nouclip auto "https://youtu.be/EXAMPLE_ID" --range 13:25-14:10 --no-subtitles -o clean_short.mp4
 
 # From local file with square 1:1 aspect ratio
 nouclip auto interview.mp4 --range 01:20-02:00 --aspect 1:1 --mode pad -o out/feed.mp4

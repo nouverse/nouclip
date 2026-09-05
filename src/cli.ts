@@ -54,9 +54,14 @@ program
   )
   .option(
     '-m, --mode <mode>',
-    'Framing style: "blur" (blurred background), "center" (crop fill), "pad" (letterbox), "stretch"'
+    'Framing style: "blur" (blurred background), "center" (crop fill), "pad" (letterbox), "stretch" (default: "blur")',
+    'blur'
   )
   .option('--blur', 'Shortcut for --mode blur (blurred background letterbox)')
+  .option('--center', 'Shortcut for --mode center (crop fill)')
+  .option('--no-subtitles', 'Do not generate or burn subtitles (clean reframed video only)')
+  .option('--no-subs', 'Alias for --no-subtitles')
+  .option('--no-subtitle', 'Alias for --no-subtitles')
   .option('-l, --lang <lang>', "Language for Whisper transcription (default: 'id')", 'id')
   .option('--font-size <size>', 'Subtitle font size (default: 60)', '60')
   .option(
@@ -105,10 +110,11 @@ program
   )
   .option(
     '-m, --mode <mode>',
-    'Framing style: "blur" (blurred background), "center" (crop), "pad" (letterbox), "stretch"',
-    'center'
+    'Framing style: "blur" (blurred background), "center" (crop), "pad" (letterbox), "stretch" (default: "blur")',
+    'blur'
   )
   .option('--blur', 'Shortcut for --mode blur')
+  .option('--center', 'Shortcut for --mode center (crop fill)')
   .option('-o, --output <path>', 'Output MP4 path')
   .action(cropCommand);
 
