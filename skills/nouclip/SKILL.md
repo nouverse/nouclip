@@ -1,37 +1,40 @@
 ---
 name: nouclip
-description: CLI video clipping, universal aspect reframing (9:16, 1:1, 4:5), Whisper transcription, kinetic subtitle burning, and draft review workflows using NouClip CLI.
+description: CLI video clipping, universal aspect reframing (9:16, 1:1, 4:5), Whisper transcription, kinetic subtitle burning, typography presets, silence trimming, BGM ducking, and draft review workflows using NouClip CLI.
 ---
 
 # NouClip — Agentic Video Clipper & Shorts Engine Skill
 
-NouClip is an agentic-first CLI tool for deterministic video cutting, aspect ratio reframing, Whisper transcription, and animated kinetic subtitles.
+Operational instructions and best practices for clipping videos, reframing aspects, transcribing with Whisper, applying typography presets, trimming silence, mixing ducked BGM, and burning kinetic subtitles using the `nouclip` CLI.
 
 ---
 
 ## 🔍 Introspection & Storage Discovery
 
-Before running operations, check workspace paths and existing artifacts:
+NouClip is agent-friendly. Before re-downloading or re-processing, always inspect the workspace:
 
 ```bash
-# Get storage paths, file counts, and service status as JSON
+# Discover storage paths and existing assets in JSON
 nouclip info --json
 
-# List existing cached downloads
+# List specific asset collections
 nouclip list downloads --json
-
-# List existing transcripts and ASS subtitles
 nouclip list transcripts --json
-
-# List rendered final outputs
+nouclip list segments --json
 nouclip list output --json
 ```
+
+Default workspace is `~/.nouclip/`:
+- `~/.nouclip/downloads/` — Cached raw source/YouTube videos (never re-downloaded if present).
+- `~/.nouclip/transcripts/` — Whisper JSONs (`*.whisper.json`) and ASS scripts (`*.ass`).
+- `~/.nouclip/segments/` — Cut raw segments, trimmed videos, and reframed MP4s.
+- `~/.nouclip/output/` — Final rendered videos with burned subtitles & mixed BGM.
 
 ---
 
 ## ⏱️ Timestamp & Range Syntax
 
-NouClip supports flexible time formats across all clipping commands:
+NouClip accepts human, timestamp, and second ranges:
 - **Ranges:** `--range 13:25-14:50` or `--range 01:20..02:15` or `--range 45-75`
 - **Explicit From/To:** `--from 13:25 --to 14:50` (or `--start 13:25 --end 14:50`)
 - **Duration:** `--from 13:25 --duration 45s` (or `--start 805 --duration 45`)
@@ -39,14 +42,41 @@ NouClip supports flexible time formats across all clipping commands:
 
 ---
 
+## 🎨 Typography Presets (`--style`)
+
+NouClip includes 4 built-in animated ASS kinetic typography presets:
+- `--style hormozi`: High-energy all-caps (Arial Black), electric neon green highlight (`&H0000FF00`), pop scaling 118%, thick 6px outline.
+- `--style storyteller`: Clean natural-case (Inter/Arial), soft cyan highlight (`&H0050E3C2`), refined 3px outline.
+- `--style cinematic`: Elegant wide-tracking (+4), golden amber highlight (`&H0000A5FF`).
+- `--style default`: Classic yellow highlight.
+
+---
+
+## ✂️ Silence & Pause Trimming (`--silence-trim`)
+
+- Automatically detects silent pauses between spoken words using Whisper word timestamps (`--silence-gap 0.6` by default).
+- Excises silent gaps and concatenates video seamlessly with FFmpeg.
+- Automatically recalculates and frame-shifts subtitle `.ass` timestamps so captions stay 100% aligned with the trimmed video.
+
+---
+
+## 🎵 Background Music & Sidechain Ducking (`--bgm`)
+
+- `--bgm <path>`: Background music track to loop and mix with video audio.
+- Auto sidechain ducking: BGM volume automatically attenuates when speech is detected and gently rises back up during silence.
+- `--bgm-volume <volume>`: BGM volume factor (default: `0.10`).
+- `--no-ducking`: Disables sidechain compression for constant volume mixing.
+
+---
+
 ## 📐 Aspect Ratios & Framing Modes
 
-| Aspect Ratio (`--aspect`) | Target Resolution | Best Used For |
+| Preset | Target Resolution | Description |
 |---|---|---|
-| `9:16` *(default)* | 1080x1920 | YouTube Shorts, TikTok, Instagram Reels |
-| `1:1` | 1080x1080 | Instagram Feed, LinkedIn, Twitter/X video |
-| `4:5` | 1080x1350 | Instagram Portrait Post |
-| `16:9` | 1920x1080 | Landscape / YouTube standard |
+| `9:16` *(default)* | 1080x1920 | TikTok, YouTube Shorts, Instagram Reels |
+| `1:1` | 1080x1080 | Instagram Feed, Square Video |
+| `4:5` | 1080x1350 | Instagram Portrait Feed |
+| `16:9` | 1920x1080 | YouTube Horizontal, Widescreen |
 | `4:3` | 1440x1080 | Classic standard definition |
 
 ### Framing Styles (`--mode`)
@@ -57,24 +87,13 @@ NouClip supports flexible time formats across all clipping commands:
 
 ---
 
-## ✂️ Clean Framing / Video Trimming (0 Subtitles for Video Editors)
-
-If video editors or downstream tools want to do their own post-production and typography, pass `--no-subtitles` (or `--no-subs`):
-
-```bash
-# Cuts segment and reframes to 9:16 blurred background with zero subtitles
-nouclip auto video.mp4 --range 01:35-02:10 --aspect 9:16 --no-subtitles -o clean_clip.mp4
-```
-
----
-
 ## ✍️ Staged & Draft Review Workflow (Recommended for Agents)
 
 AI Whisper STT can mishear proper nouns, brand names, or slang. Use `--draft` to review transcripts before burning:
 
 ### Step 1: Generate Segment & Subtitle Draft
 ```bash
-nouclip auto "https://youtu.be/EXAMPLE_ID" --range 13:25-14:10 --aspect 9:16 --blur --draft
+nouclip auto "https://youtu.be/EXAMPLE_ID" --range 13:25-14:10 --aspect 9:16 --style hormozi --blur --draft
 ```
 Output will return:
 - Segment Video: `~/.nouclip/segments/video_framed_9x16_blur.mp4`
@@ -90,6 +109,7 @@ Read and correct any typos in the `.ass` file:
 ```bash
 nouclip subtitle ~/.nouclip/segments/video_framed_9x16_blur.mp4 \
   --sub ~/.nouclip/transcripts/video_13m25s-14m10s.ass \
+  --bgm "lofi_music.mp3" \
   -o ~/.nouclip/output/final_short.mp4
 ```
 
@@ -107,15 +127,32 @@ nouclip auto <videoOrUrl> [options]
   -a, --aspect <ratio>      Target aspect ratio (default: "9:16")
   -m, --mode <mode>         Framing mode: blur, center, pad, stretch
   --blur                    Shortcut for --mode blur
+  --no-subtitles            Do not generate or burn subtitles (clean reframed video only)
   -l, --lang <lang>         Whisper language (default: "id")
+  --style <preset>          Subtitle style preset: "default", "hormozi", "storyteller", "cinematic"
   --font-size <size>        Subtitle font size (default: 60)
+  --silence-trim            Auto-trim silent pauses (>0.6s) between words
+  --silence-gap <seconds>   Silence threshold in seconds before trimming (default: 0.6)
+  --bgm <path>              Background music track to mix with sidechain ducking
+  --bgm-volume <volume>     BGM audio volume factor (default: 0.10)
+  --no-ducking              Disable sidechain audio ducking
   --draft, --no-burn        Pause before burning for subtitle review
   -o, --output <path>       Output video path
-  --download-dir <dir>      Custom directory for raw downloads
-  --output-dir <dir>        Custom directory for rendered outputs
 ```
 
-### 2. `download` — YouTube Downloader & Caching
+### 2. `subtitle` — Burn Subtitles & Audio Mixing
+```bash
+nouclip subtitle <video> [options]
+  --sub <assPath>           ASS subtitle file to burn
+  --style <preset>          Subtitle typography style preset
+  --font-size <size>        Subtitle font size (default: 60)
+  --bgm <path>              Background music track
+  --bgm-volume <volume>     BGM audio volume factor (default: 0.10)
+  --no-ducking              Disable sidechain audio ducking
+  -o, --output <path>       Output MP4 path
+```
+
+### 3. `download` — YouTube Downloader & Caching
 ```bash
 nouclip download <url> [options]
   -s, --start <time>        Start timestamp
@@ -125,7 +162,7 @@ nouclip download <url> [options]
   --force                   Force re-download even if already cached
 ```
 
-### 3. `cut` — Fast Video Segment Clipping
+### 4. `cut` — Fast Video Segment Clipping
 ```bash
 nouclip cut <video> [options]
   -r, --range <range>       Time range e.g. "13:25-14:50"
@@ -136,7 +173,7 @@ nouclip cut <video> [options]
   --reencode                Re-encode video with libx264 (default: false)
 ```
 
-### 4. `crop` / `reframe` — Aspect Ratio Converter
+### 5. `crop` / `reframe` — Aspect Ratio Converter
 ```bash
 nouclip crop <video> [options]
   -a, --aspect <ratio>      Target aspect ratio (9:16, 1:1, 4:5, 16:9)
@@ -145,7 +182,7 @@ nouclip crop <video> [options]
   -o, --output <path>       Output MP4 path
 ```
 
-### 5. `extract` — Audio & Whisper Transcription
+### 6. `extract` — Audio & Whisper Transcription
 ```bash
 nouclip extract <video> [options]
   -l, --lang <lang>         Language (default: "id")
@@ -153,44 +190,9 @@ nouclip extract <video> [options]
   -o, --output <path>       Output JSON path (default: ~/.nouclip/transcripts/)
 ```
 
-### 6. `transcript` — Format Converter
+### 7. `transcript` — Format Converter
 ```bash
 nouclip transcript <videoOrJson> [options]
   -f, --format <format>     Export format: txt, srt, vtt, json (default: txt)
   -l, --lang <lang>         Language (default: "id")
-  -o, --output <path>       Output file path
-```
-
-### 7. `subtitle` — Animated Subtitle Burner
-```bash
-nouclip subtitle <video> [options]
-  -s, --sub <path>          Path to .ass script or .json word timestamps
-  --font-size <size>        Font size (default: 60)
-  --primary-color <hex>     Inactive text color
-  --highlight-color <hex>   Active animated word color
-  -o, --output <path>       Output MP4 path
-```
-
----
-
-## ⚙️ Environment Variables
-
-Set in `~/.nouclip/.env` or working directory `.env`:
-
-```bash
-# Storage Paths
-NOUCLIP_WORKSPACE_DIR=~/.nouclip
-NOUCLIP_DOWNLOAD_DIR=~/.nouclip/downloads
-NOUCLIP_TRANSCRIPT_DIR=~/.nouclip/transcripts
-NOUCLIP_OUTPUT_DIR=~/.nouclip/output
-
-# STT Whisper / Audio API Endpoint (Local voice-compute or Cloud OpenAI/Groq)
-NOUCLIP_OPENAI_AUDIO_URL=http://localhost:8880
-NOUCLIP_OPENAI_AUDIO_API_KEY=
-NOUCLIP_OPENAI_AUDIO_MODEL=large-v3
-
-# Optional LLM API Endpoint
-NOUCLIP_OPENAI_LLM_URL=https://api.openai.com/v1
-NOUCLIP_OPENAI_LLM_API_KEY=
-NOUCLIP_OPENAI_LLM_MODEL=gpt-4o-mini
 ```

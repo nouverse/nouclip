@@ -270,4 +270,4 @@ bun run lint
 
 ## 📄 License
 
-MIT © [Nouverse Technologies](https://nouverse.tech) & [Gadingnst](https://gading.dev)
+MIT © [Nouverse Technologies](https://nouverse.tech) & [Gading Nasution](https://gading.dev)
