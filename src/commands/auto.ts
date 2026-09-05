@@ -116,9 +116,9 @@ export async function autoCommand(videoOrUrl: string, options: AutoCommandOption
       }
       logger.step(currentStep++, totalSteps, 'Mixing BGM audio with sidechain ducking...');
       const mixedOut = join(config.segmentDir, `${transcriptBase}_clean_bgm.mp4`);
-      const bgmVol = options.bgmVolume ? Number.parseFloat(options.bgmVolume) : 0.2;
+      const bgmVol = options.bgmVolume ? Number.parseFloat(options.bgmVolume) : 0.1;
       await FFmpegRunner.mixBgm(cleanVideo, bgmPath, mixedOut, {
-        bgmVolume: Number.isFinite(bgmVol) ? bgmVol : 0.2,
+        bgmVolume: Number.isFinite(bgmVol) ? bgmVol : 0.1,
         ducking: options.ducking !== false
       });
       cleanVideo = mixedOut;
@@ -218,9 +218,9 @@ export async function autoCommand(videoOrUrl: string, options: AutoCommandOption
       'Mixing background music (BGM) with sidechain ducking...'
     );
     const mixedWithBgm = join(config.segmentDir, `${transcriptBase}_with_bgm.mp4`);
-    const bgmVol = options.bgmVolume ? Number.parseFloat(options.bgmVolume) : 0.2;
+    const bgmVol = options.bgmVolume ? Number.parseFloat(options.bgmVolume) : 0.1;
     await FFmpegRunner.mixBgm(burnedOutput, bgmPath, mixedWithBgm, {
-      bgmVolume: Number.isFinite(bgmVol) ? bgmVol : 0.2,
+      bgmVolume: Number.isFinite(bgmVol) ? bgmVol : 0.1,
       ducking: options.ducking !== false
     });
     finalRenderedVideo = mixedWithBgm;

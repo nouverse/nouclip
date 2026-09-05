@@ -251,7 +251,7 @@ export class FFmpegRunner {
     outputPath: string,
     options: MixBgmOptions = {}
   ): string[] {
-    const bgmVolume = options.bgmVolume ?? 0.2;
+    const bgmVolume = options.bgmVolume ?? 0.1;
     const ducking = options.ducking !== false;
     const hasAudio = options.hasAudio !== false;
 

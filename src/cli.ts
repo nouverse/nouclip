@@ -95,7 +95,7 @@ program
     '0.6'
   )
   .option('--bgm <path>', 'Background music track to mix with sidechain ducking')
-  .option('--bgm-volume <volume>', 'BGM audio volume factor (default: 0.2)', '0.2')
+  .option('--bgm-volume <volume>', 'BGM audio volume factor (default: 0.10)', '0.10')
   .option('--no-ducking', 'Disable sidechain audio ducking (constant volume BGM mix)')
   .option(
     '--draft',
@@ -192,7 +192,7 @@ program
   .option('--primary-color <hex>', 'Inactive text color (default: &H00FFFFFF&)')
   .option('--highlight-color <hex>', 'Active animated word color (default: &H0000FFFF&)')
   .option('--bgm <path>', 'Background music track to mix with sidechain ducking')
-  .option('--bgm-volume <volume>', 'BGM audio volume factor (default: 0.2)', '0.2')
+  .option('--bgm-volume <volume>', 'BGM audio volume factor (default: 0.10)', '0.10')
   .option('--no-ducking', 'Disable sidechain audio ducking (constant volume BGM mix)')
   .option('-o, --output <path>', 'Output MP4 path')
   .action(action(subtitleCommand));

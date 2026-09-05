@@ -100,9 +100,9 @@ export async function subtitleCommand(videoPath: string, options: SubtitleComman
       : join(config.outputDir, `${baseName}_subtitled.mp4`);
 
     logger.info(`Mixing BGM audio with sidechain ducking into ${finalOutput}...`);
-    const bgmVol = options.bgmVolume ? Number.parseFloat(options.bgmVolume) : 0.2;
+    const bgmVol = options.bgmVolume ? Number.parseFloat(options.bgmVolume) : 0.1;
     await FFmpegRunner.mixBgm(intermediateOutput, bgmPath, finalOutput, {
-      bgmVolume: Number.isFinite(bgmVol) ? bgmVol : 0.2,
+      bgmVolume: Number.isFinite(bgmVol) ? bgmVol : 0.1,
       ducking: options.ducking !== false
     });
   }
