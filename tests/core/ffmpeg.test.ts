@@ -224,13 +224,13 @@ describe('FFmpegRunner.exec', () => {
   });
 
   it('rejects on a non-zero exit code', async () => {
-    await expect(FFmpegRunner.exec('sh', ['-c', 'echo bad 1>&2; exit 3'])).rejects.toThrow(
-      /exit 3/
-    );
+    await expect(
+      FFmpegRunner.exec(process.execPath, ['-e', 'console.error("bad"); process.exit(3)'])
+    ).rejects.toThrow(/exit 3/);
   });
 
   it('resolves with captured stdout', async () => {
-    const { stdout } = await FFmpegRunner.exec('sh', ['-c', 'echo hello']);
+    const { stdout } = await FFmpegRunner.exec(process.execPath, ['-e', 'console.log("hello")']);
     expect(stdout.trim()).toBe('hello');
   });
 });

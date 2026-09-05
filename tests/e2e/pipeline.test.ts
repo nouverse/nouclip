@@ -97,7 +97,7 @@ describe.skipIf(!ffmpegAvailable)('ffmpeg pipeline', () => {
   it('burns subtitles from a path containing filter metacharacters', async () => {
     // yt-dlp names files after the video title: quotes, commas and brackets
     // are routine, and used to break the ass= filtergraph.
-    const trickyDir = join(dir, "Ep 12: it's 'weird', [really]");
+    const trickyDir = join(dir, "Ep 12 - it's 'weird', [really]");
     const trickyAss = join(trickyDir, 'kinetic.ass');
     const out = join(dir, 'burned.mp4');
 
