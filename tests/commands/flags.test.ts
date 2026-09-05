@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import { isDraftRun, shouldSkipSubtitles } from '@/commands/auto';
 import { resolveFramingMode } from '@/commands/framing';
-import { parseNumericOption, resolveTranscriptJson } from '@/commands/highlight';
+import {
+  applyDurationBudget,
+  parseNumericOption,
+  resolveTranscriptJson
+} from '@/commands/highlight';
 import { parseFontSize } from '@/commands/subtitle';
 import { CliError } from '@/utils/errors';
 
@@ -58,9 +62,8 @@ describe('resolveFramingMode', () => {
 });
 
 describe('parseFontSize', () => {
-  it('defaults when the flag is absent', () => {
-    expect(parseFontSize(undefined)).toBe(60);
-    expect(parseFontSize(undefined, 42)).toBe(42);
+  it('stays undefined when the flag is absent so the style preset size wins', () => {
+    expect(parseFontSize(undefined)).toBeUndefined();
   });
 
   it('parses a numeric flag', () => {
@@ -86,6 +89,31 @@ describe('parseNumericOption', () => {
   it('names the offending flag in the error', () => {
     expect(() => parseNumericOption('abc', '--max-clips', 5)).toThrow(/--max-clips/);
     expect(() => parseNumericOption('0', '--max-clips', 5)).toThrow(/positive number/);
+  });
+});
+
+describe('applyDurationBudget', () => {
+  const clip = (duration: number) => ({ duration });
+
+  it('keeps every clip when they fit the budget', () => {
+    const clips = [clip(30), clip(40), clip(50)];
+    expect(applyDurationBudget(clips, 180)).toEqual(clips);
+  });
+
+  it('stops adding clips once the budget is spent', () => {
+    expect(applyDurationBudget([clip(60), clip(60), clip(60)], 120)).toEqual([clip(60), clip(60)]);
+  });
+
+  it('skips an oversized clip but still fits a later shorter one', () => {
+    expect(applyDurationBudget([clip(50), clip(60), clip(25)], 80)).toEqual([clip(50), clip(25)]);
+  });
+
+  it('always keeps the top clip even when it alone exceeds the budget', () => {
+    expect(applyDurationBudget([clip(90), clip(30)], 45)).toEqual([clip(90)]);
+  });
+
+  it('handles an empty result set', () => {
+    expect(applyDurationBudget([], 180)).toEqual([]);
   });
 });
 

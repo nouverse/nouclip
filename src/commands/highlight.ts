@@ -16,7 +16,30 @@ export interface HighlightCommandOptions {
   apiKey?: string;
   minDuration?: string;
   maxDuration?: string;
+  budget?: string;
   output?: string;
+}
+
+/**
+ * Keeps clips in ranked order while their total duration fits `budget`.
+ * A clip that would overflow is skipped rather than ending the loop, so a
+ * shorter lower-ranked moment can still use the remaining seconds. The top
+ * clip is always kept: a budget below its length should not return nothing.
+ */
+export function applyDurationBudget<T extends { duration: number }>(
+  clips: T[],
+  budget: number
+): T[] {
+  const kept: T[] = [];
+  let total = 0;
+
+  for (const clip of clips) {
+    if (kept.length > 0 && total + clip.duration > budget) continue;
+    kept.push(clip);
+    total += clip.duration;
+  }
+
+  return kept;
 }
 
 /** Parses a numeric CLI flag, rejecting garbage instead of silently NaN-ing. */
@@ -74,8 +97,9 @@ export async function highlightCommand(
   if (maxDur < minDur) {
     throw new CliError('--max-duration must be greater than or equal to --min-duration.');
   }
+  const budget = parseNumericOption(options.budget, '--budget', 180);
 
-  const clips = await discoverClips(jsonPath, text, words, {
+  const discovered = await discoverClips(jsonPath, text, words, {
     keyword: options.keyword,
     baseUrl: options.baseUrl,
     apiKey: options.apiKey,
@@ -84,6 +108,13 @@ export async function highlightCommand(
     minDur,
     maxDur
   });
+
+  const clips = applyDurationBudget(discovered, budget);
+  if (clips.length < discovered.length) {
+    logger.info(
+      `Trimmed ${discovered.length - clips.length} clip(s) to stay within the ${budget}s total budget.`
+    );
+  }
 
   if (clips.length === 0) {
     logger.warn('No clips found matching the given parameters.');

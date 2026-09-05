@@ -65,6 +65,16 @@ describe('nouclip CLI', () => {
     }
   });
 
+  it('exposes every styling override documented for auto', async () => {
+    const { code, stdout } = await runCli(['auto', '--help']);
+    expect(code).toBe(0);
+    // These reach ASSGenerator through autoCommand; leaving them unregistered
+    // made the code path unreachable from the CLI.
+    for (const flag of ['--style', '--font-size', '--primary-color', '--highlight-color']) {
+      expect(stdout).toContain(flag);
+    }
+  });
+
   it('fails on an unknown command', async () => {
     const { code, stderr } = await runCli(['nope']);
     expect(code).not.toBe(0);

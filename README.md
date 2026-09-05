@@ -23,10 +23,12 @@ Designed for automated workflows, AI agent harnesses, and power users who need d
 - ⏱️ **Human & Agent Timestamps:** Supports flexible range syntaxes like `--range 13:25-14:50`, `01:13:25`, `85s`, and `13m25s`.
 - 📐 **Universal Aspect Reframing:** Converts videos to any aspect ratio (`9:16`, `1:1`, `4:5`, `16:9`, or custom `W:H`) with multiple framing modes (`blur`, `center`, `pad`, `stretch`).
 - 🎨 **Typography Presets (`--style`):** Instant subtitle styling presets:
-  - `hormozi`: Bold all-caps, neon green active-word highlight (`&H0000FF00`), pop zoom scaling (118%), thick outline.
-  - `storyteller`: Clean natural-case, soft cyan active-word highlight (`&H0050E3C2`), thin outline.
-  - `cinematic`: Wide tracking, golden amber highlight (`&H0000A5FF`).
-  - `default`: Classic yellow highlight.
+  - `hormozi`: Bold all-caps (Arial Black, 70px), neon green active-word highlight (`&H0000FF00`), pop zoom scaling (118%), thick outline.
+  - `storyteller`: Clean natural-case (Arial, 54px), soft cyan active-word highlight (`&H0050E3C2`), thin outline.
+  - `cinematic`: Wide tracking (Trebuchet MS, 58px), golden amber highlight (`&H0000A5FF`).
+  - `default`: Classic all-caps (Arial Black, 62px) with yellow highlight.
+
+  Each preset ships its own font size; `--font-size`, `--primary-color` and `--highlight-color` override it only when passed.
 - ✂️ **Silence & Pause Trimming (`--silence-trim`):** Reads Whisper word timestamps to automatically cut silent pauses (`>0.6s`), concatenating speech seamlessly and auto-shifting subtitle timestamps.
 - 🎵 **Smart BGM & Sidechain Ducking (`--bgm`):** Auto-loops background music and dynamically ducks/lowers BGM volume when speech is active (`sidechaincompress` + `amix`).
 - ✍️ **Draft & Staged Workflow (`--draft` / `--no-burn`):** Cuts and prepares transcript/ASS files for human or agent review before burning subtitles into the final video.
@@ -128,10 +130,10 @@ bun run build
 
 ## ⚙️ Configuration & Environment Variables
 
-NouClip checks for environment variables in the following order:
-1. `~/.nouclip/.env` (Global user config)
-2. `./.env` (Current working directory)
-3. Shell environment variables
+NouClip resolves each variable by precedence, first match wins:
+1. Shell environment variables (always win)
+2. `~/.nouclip/.env` (Global user config)
+3. `./.env` (Current working directory — fills in what the global file left unset)
 
 ### Example `.env`
 

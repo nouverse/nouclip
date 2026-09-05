@@ -87,7 +87,12 @@ program
     'Subtitle typography style preset: "default", "hormozi", "storyteller", "cinematic" (default: "default")',
     'default'
   )
-  .option('--font-size <size>', 'Subtitle font size (default: 60)', '60')
+  .option('--font-size <size>', 'Subtitle font size (overrides the --style preset size)')
+  .option('--primary-color <hex>', 'Inactive text color e.g. "&H00FFFFFF&" (overrides the preset)')
+  .option(
+    '--highlight-color <hex>',
+    'Active animated word color e.g. "&H0000FFFF&" (overrides the preset)'
+  )
   .option('--silence-trim', 'Auto-trim silent pauses (>0.6s) between words for faster pacing')
   .option(
     '--silence-gap <seconds>',
@@ -188,9 +193,9 @@ program
     'Subtitle typography style preset: "default", "hormozi", "storyteller", "cinematic" (default: "default")',
     'default'
   )
-  .option('--font-size <size>', 'Font size (default: 60)', '60')
-  .option('--primary-color <hex>', 'Inactive text color (default: &H00FFFFFF&)')
-  .option('--highlight-color <hex>', 'Active animated word color (default: &H0000FFFF&)')
+  .option('--font-size <size>', 'Font size (overrides the --style preset size)')
+  .option('--primary-color <hex>', 'Inactive text color (overrides the preset)')
+  .option('--highlight-color <hex>', 'Active animated word color (overrides the preset)')
   .option('--bgm <path>', 'Background music track to mix with sidechain ducking')
   .option('--bgm-volume <volume>', 'BGM audio volume factor (default: 0.10)', '0.10')
   .option('--no-ducking', 'Disable sidechain audio ducking (constant volume BGM mix)')

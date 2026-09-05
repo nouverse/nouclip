@@ -110,9 +110,13 @@ export async function subtitleCommand(videoPath: string, options: SubtitleComman
   logger.success(`🎉 Subtitled video rendered: ${finalOutput}`);
 }
 
-/** Parses `--font-size`, rejecting values that would produce unreadable ASS. */
-export function parseFontSize(value: string | undefined, fallback = 60): number {
-  if (value === undefined) return fallback;
+/**
+ * Parses `--font-size`, rejecting values that would produce unreadable ASS.
+ * Returns `undefined` when the flag is absent so each `--style` preset keeps
+ * its own designed size instead of being flattened to one global default.
+ */
+export function parseFontSize(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
   const size = Number.parseInt(value, 10);
   if (!Number.isFinite(size) || size <= 0) {
     throw new CliError(`Invalid --font-size "${value}": expected a positive number.`);

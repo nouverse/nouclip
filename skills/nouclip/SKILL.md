@@ -83,6 +83,8 @@ nouclip list segments --json
 nouclip list output --json
 ```
 
+Workspace resolution order: `NOUCLIP_WORKSPACE_DIR` → a `.nouclip/` directory in the current working directory → `~/.nouclip/`. Running from a project that has its own `.nouclip/` therefore keeps artifacts local, so always confirm the active paths with `nouclip info --json` before assuming `~/.nouclip/`.
+
 Default workspace is `~/.nouclip/`:
 - `~/.nouclip/downloads/` — Cached raw source/YouTube videos (never re-downloaded if present).
 - `~/.nouclip/transcripts/` — Whisper JSONs (`*.whisper.json`) and ASS scripts (`*.ass`).
@@ -104,10 +106,12 @@ NouClip accepts human, timestamp, and second ranges:
 ## 🎨 Typography Presets (`--style`)
 
 NouClip includes 4 built-in animated ASS kinetic typography presets:
-- `--style hormozi`: High-energy all-caps (Arial Black), electric neon green highlight (`&H0000FF00`), pop scaling 118%, thick 6px outline.
-- `--style storyteller`: Clean natural-case (Inter/Arial), soft cyan highlight (`&H0050E3C2`), refined 3px outline.
-- `--style cinematic`: Elegant wide-tracking (+4), golden amber highlight (`&H0000A5FF`).
-- `--style default`: Classic yellow highlight.
+- `--style hormozi`: High-energy all-caps (Arial Black, 70px), electric neon green highlight (`&H0000FF00`), pop scaling 118%, thick 6px outline.
+- `--style storyteller`: Clean natural-case (Arial, 54px), soft cyan highlight (`&H0050E3C2`), refined 3px outline.
+- `--style cinematic`: Elegant all-caps wide-tracking (Trebuchet MS, 58px, spacing +4), golden amber highlight (`&H0000A5FF`).
+- `--style default`: Classic all-caps (Arial Black, 62px) with yellow highlight (`&H0000FFFF`).
+
+Each preset carries its own font size. `--font-size`, `--primary-color` and `--highlight-color` are overrides: pass them only to deviate from the preset, otherwise leave them out so the preset renders as designed.
 
 ---
 
@@ -219,14 +223,17 @@ nouclip auto <videoOrUrl> [options]
   -s, --start, --from <t>   Start timestamp e.g. "13:25", "01:13:25", "85s"
   -e, --end, --to <t>       End timestamp e.g. "14:50", "01:15:00"
   -d, --duration <time>     Duration e.g. "30s", "1m", "45"
-  -a, --aspect <ratio>      Target aspect ratio: "9:16", "1:1", "4:5", "16:9" (default: "9:16")
+  -a, --aspect <ratio>      Target aspect: "9:16", "1:1", "4:5", "16:9", "4:3", custom "W:H" (default: "9:16")
   -m, --mode <mode>         Framing style: "blur", "center", "pad", "stretch" (default: "blur")
   --blur                    Shortcut for --mode blur (blurred background letterbox)
   --center                  Shortcut for --mode center (crop fill)
-  --no-subtitles, --no-subs Do not generate or burn subtitles (clean reframed video only)
+  --no-subtitles            Do not generate or burn subtitles (clean reframed video only)
+  --no-subs, --no-subtitle  Aliases for --no-subtitles
   -l, --lang <lang>         Whisper language (default: "id")
   --style <preset>          Typography style: "default", "hormozi", "storyteller", "cinematic"
-  --font-size <size>        Subtitle font size (default: 60)
+  --font-size <size>        Font size override (default: the --style preset size)
+  --primary-color <hex>     Inactive text color override e.g. "&H00FFFFFF&"
+  --highlight-color <hex>   Active animated word color override e.g. "&H0000FFFF&"
   --silence-trim            Auto-trim silent pauses (>0.6s) between words for rapid pacing
   --silence-gap <seconds>   Silence threshold in seconds before trimming (default: 0.6)
   --bgm <path>              Background music track to mix with sidechain ducking
@@ -237,6 +244,9 @@ nouclip auto <videoOrUrl> [options]
   --download-dir <dir>      Custom directory to store downloaded videos
   --output-dir <dir>        Custom directory to store final videos
   --keep-temp               Keep intermediate WAV and temporary files
+
+Default output: <workspace>/output/<name><range>_short.mp4
+                (or <name><range>_<aspect>_clean.mp4 with --no-subtitles)
 ```
 
 ### 4. `download` — YouTube Downloader & Caching
@@ -263,7 +273,7 @@ nouclip cut <video> [options]
 ### 6. `crop` / `reframe` — Aspect Ratio Converter
 ```bash
 nouclip crop <video> [options]
-  -a, --aspect <ratio>      Target aspect ratio: "9:16", "1:1", "4:5", "16:9" (default: "9:16")
+  -a, --aspect <ratio>      Target aspect: "9:16", "1:1", "4:5", "16:9", "4:3", custom "W:H" (default: "9:16")
   -m, --mode <mode>         Framing style: "blur", "center", "pad", "stretch" (default: "blur")
   --blur                    Shortcut for --mode blur
   --center                  Shortcut for --mode center (crop fill)
@@ -280,7 +290,7 @@ nouclip extract <video> [options]
   -l, --lang <lang>         Language for Whisper transcription (default: "id")
   -m, --model <model>       Whisper model name (default: "large-v3")
   --keep-wav                Keep the intermediate 16kHz mono WAV file
-  -o, --output <path>       Output JSON path (default: ~/.nouclip/transcripts/)
+  -o, --output <path>       Output JSON (default: <workspace>/transcripts/<name><range>.whisper.json)
 ```
 
 ### 8. `transcript` — Format Converter
@@ -288,7 +298,7 @@ nouclip extract <video> [options]
 nouclip transcript <videoOrJson> [options]
   -f, --format <format>     Export format: "txt", "srt", "vtt", "json" (default: "txt")
   -l, --lang <lang>         Transcription language (default: "id")
-  -o, --output <path>       Output file path
+  -o, --output <path>       Output file (default: <workspace>/transcripts/<name>_transcript.<format>)
 ```
 
 ### 9. `subtitle` — Animated Subtitle Burner & Audio Mixing
@@ -297,13 +307,14 @@ nouclip subtitle <video> [options]
   -s, --sub <path>          Path to .ass subtitle file or .json word timestamps
   -t, --timestamps <json>   Path to Whisper word timestamps JSON (alias for --sub)
   --style <preset>          Subtitle style: "default", "hormozi", "storyteller", "cinematic"
-  --font-size <size>        Subtitle font size (default: 60)
-  --primary-color <hex>     Inactive text color (default: &H00FFFFFF&)
-  --highlight-color <hex>   Active animated word color (default: &H0000FFFF&)
+                            (only applied when --sub points at a .json, not a ready .ass)
+  --font-size <size>        Font size override (default: the --style preset size)
+  --primary-color <hex>     Inactive text color override (preset default: &H00FFFFFF&)
+  --highlight-color <hex>   Active animated word color override (preset default: &H0000FFFF&)
   --bgm <path>              Background music track to mix with sidechain ducking
   --bgm-volume <volume>     BGM audio volume factor (default: 0.10)
   --no-ducking              Disable sidechain audio ducking (constant volume BGM)
-  -o, --output <path>       Output MP4 path
+  -o, --output <path>       Output MP4 path (default: <workspace>/output/<name>_subtitled.mp4)
 ```
 
 ### 10. `highlight` — AI Moments Discovery (Optional LLM Heuristics)
@@ -313,9 +324,10 @@ nouclip highlight <videoOrJson> [options]
   -m, --max-clips <count>   Maximum number of highlight clips to generate (default: 5)
   --min-duration <sec>      Minimum clip duration in seconds (default: 25)
   --max-duration <sec>      Maximum clip duration in seconds (default: 60)
-  --budget <seconds>        Total duration target across all clips (default: 180)
-  -o, --output <path>       Output JSON file to save suggested highlight clips
+  --budget <seconds>        Total duration cap across all returned clips (default: 180)
+  -o, --output <path>       Output JSON (default: <transcript>.highlights.json)
 ```
+Requires a Whisper JSON produced by `nouclip extract` first. Without an LLM API key it falls back to local heuristic density clustering, so it still works fully offline; `--keyword` always uses keyword matching instead of the LLM.
 
 ---
 
@@ -324,7 +336,7 @@ nouclip highlight <videoOrJson> [options]
 NouClip automatically loads configuration from `~/.nouclip/.env` (global) and `./.env` (local directory). Existing shell environment variables take precedence.
 
 ### Minimal vs Optional Configuration
-- **REQUIRED:** Only `NOUCLIP_OPENAI_AUDIO_URL` must be configured (pointing to your Whisper STT endpoint).
+- **THE ONLY ONE TO SET:** `NOUCLIP_OPENAI_AUDIO_URL` — your Whisper STT endpoint. It falls back to `http://localhost:8880`, so it can be omitted **only** when a local Whisper server already listens there; any other setup (Groq, OpenAI, a different port) must set it or every transcription step fails.
 - **OPTIONAL:** Everything else works out-of-the-box using sensible defaults!
   - `NOUCLIP_OPENAI_AUDIO_API_KEY` is **optional** (leave blank for local Whisper compute).
   - All storage paths default cleanly to `~/.nouclip/`.
@@ -344,10 +356,10 @@ EOF
 
 | Variable Name | Fallback Key | Requirement | Default Value | Description |
 |---|---|---|---|---|
-| `NOUCLIP_OPENAI_AUDIO_URL` | `OPENAI_AUDIO_URL` | **REQUIRED** | `http://localhost:8880` | Whisper STT endpoint (local or remote OpenAI/Groq) |
+| `NOUCLIP_OPENAI_AUDIO_URL` | `OPENAI_AUDIO_URL` | **Set in practice** | `http://localhost:8880` | Whisper STT endpoint (local or remote OpenAI/Groq) |
 | `NOUCLIP_OPENAI_AUDIO_API_KEY` | `OPENAI_AUDIO_API_KEY` | **Optional** | *(empty)* | API Key for audio endpoint (not required for local compute) |
 | `NOUCLIP_OPENAI_AUDIO_MODEL` | `OPENAI_AUDIO_MODEL` | **Optional** | `large-v3` | Whisper model identifier |
-| `NOUCLIP_WORKSPACE_DIR` | - | **Optional** | `~/.nouclip` | Root workspace directory for all artifacts & caches |
+| `NOUCLIP_WORKSPACE_DIR` | - | **Optional** | `./.nouclip` if present, else `~/.nouclip` | Root workspace directory for all artifacts & caches |
 | `NOUCLIP_DOWNLOAD_DIR` | - | **Optional** | `~/.nouclip/downloads` | Storage directory for cached downloaded videos |
 | `NOUCLIP_TRANSCRIPT_DIR` | - | **Optional** | `~/.nouclip/transcripts` | Storage for Whisper JSON & ASS subtitle scripts |
 | `NOUCLIP_SEGMENT_DIR` | - | **Optional** | `~/.nouclip/segments` | Storage for cropped segments & reframed MP4s |
