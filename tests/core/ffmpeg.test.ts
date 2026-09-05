@@ -173,6 +173,44 @@ describe('FFmpegRunner.escapeFilterPath', () => {
   });
 });
 
+describe('FFmpegRunner.buildMixBgmArgs', () => {
+  it('builds sidechain ducking filtergraph for video with audio', () => {
+    const args = FFmpegRunner.buildMixBgmArgs('video.mp4', 'bgm.mp3', 'out.mp4', {
+      bgmVolume: 0.15,
+      ducking: true
+    });
+    expect(args).toContain('-filter_complex');
+    const filter = args[args.indexOf('-filter_complex') + 1];
+    expect(filter).toContain('sidechaincompress');
+    expect(filter).toContain('volume=0.15');
+    expect(args).toContain('-shortest');
+  });
+
+  it('builds constant volume mix when ducking is false', () => {
+    const args = FFmpegRunner.buildMixBgmArgs('video.mp4', 'bgm.mp3', 'out.mp4', {
+      bgmVolume: 0.25,
+      ducking: false
+    });
+    const filter = args[args.indexOf('-filter_complex') + 1];
+    expect(filter).not.toContain('sidechaincompress');
+    expect(filter).toContain('amix');
+  });
+});
+
+describe('FFmpegRunner.buildTrimSilenceArgs', () => {
+  it('builds concat filtergraph for multiple speech intervals', () => {
+    const args = FFmpegRunner.buildTrimSilenceArgs('in.mp4', 'out.mp4', [
+      { start: 0, end: 4 },
+      { start: 6, end: 10 }
+    ]);
+    expect(args).toContain('-filter_complex');
+    const filter = args[args.indexOf('-filter_complex') + 1];
+    expect(filter).toContain('trim=start=0:end=4');
+    expect(filter).toContain('trim=start=6:end=10');
+    expect(filter).toContain('concat=n=2:v=1:a=1');
+  });
+});
+
 describe('FFmpegRunner.parseProbeOutput', () => {
   it('reads dimensions, duration and fps from the video stream', () => {
     const meta = FFmpegRunner.parseProbeOutput(

@@ -12,7 +12,98 @@ export interface TranscriptSegment {
   words: WordTimestamp[];
 }
 
+export type SubtitleStylePreset = 'default' | 'hormozi' | 'storyteller' | 'cinematic';
+
+export interface SubtitleStyleConfig {
+  fontName: string;
+  fontSize: number;
+  primaryColor: string;
+  highlightColor: string;
+  outlineColor: string;
+  backColor: string;
+  bold: number;
+  italic: number;
+  outline: number;
+  shadow: number;
+  spacing: number;
+  uppercase: boolean;
+  scaleFactor: number;
+  marginV: number;
+}
+
+export const SUBTITLE_STYLE_PRESETS: Record<SubtitleStylePreset, SubtitleStyleConfig> = {
+  default: {
+    fontName: 'Arial Black',
+    fontSize: 62,
+    primaryColor: '&H00FFFFFF',
+    highlightColor: '&H0000FFFF',
+    outlineColor: '&H00000000',
+    backColor: '&H80000000',
+    bold: -1,
+    italic: 0,
+    outline: 5,
+    shadow: 2,
+    spacing: 2,
+    uppercase: true,
+    scaleFactor: 112,
+    marginV: 360
+  },
+  hormozi: {
+    fontName: 'Arial Black',
+    fontSize: 70,
+    primaryColor: '&H00FFFFFF',
+    highlightColor: '&H0000FF00', // Electric Green
+    outlineColor: '&H00000000',
+    backColor: '&HB0000000',
+    bold: -1,
+    italic: 0,
+    outline: 6,
+    shadow: 3,
+    spacing: 2,
+    uppercase: true,
+    scaleFactor: 118,
+    marginV: 380
+  },
+  storyteller: {
+    fontName: 'Arial',
+    fontSize: 54,
+    primaryColor: '&H00F5F5F5',
+    highlightColor: '&H0050E3C2', // Soft Cyan/Teal
+    outlineColor: '&H00101010',
+    backColor: '&H60000000',
+    bold: 0,
+    italic: 0,
+    outline: 3,
+    shadow: 1,
+    spacing: 1,
+    uppercase: false,
+    scaleFactor: 108,
+    marginV: 340
+  },
+  cinematic: {
+    fontName: 'Trebuchet MS',
+    fontSize: 58,
+    primaryColor: '&H00FFFFFF',
+    highlightColor: '&H0000A5FF', // Golden Amber
+    outlineColor: '&H00000000',
+    backColor: '&HA0000000',
+    bold: -1,
+    italic: 0,
+    outline: 4,
+    shadow: 2,
+    spacing: 4,
+    uppercase: true,
+    scaleFactor: 110,
+    marginV: 360
+  }
+};
+
+export function isSubtitleStylePreset(val: string): val is SubtitleStylePreset {
+  return val in SUBTITLE_STYLE_PRESETS;
+}
+
 export interface KineticASSOptions {
+  style?: SubtitleStylePreset | string;
   fontSize?: number;
   primaryColor?: string;
   highlightColor?: string;
@@ -21,13 +112,12 @@ export interface KineticASSOptions {
   maxWordDuration?: number;
   /** Silence longer than this ends the current caption group. */
   gapThreshold?: number;
+  marginV?: number;
 }
 
 export const ASS_DEFAULTS = {
   fontSize: 62,
-  /** White */
   primaryColor: '&H00FFFFFF',
-  /** Bright yellow / cyber amber */
   highlightColor: '&H0000FFFF',
   wordsPerGroup: 2,
   maxWordDuration: 1.0,
@@ -78,18 +168,28 @@ export class ASSGenerator {
     return groups;
   }
 
+  /** Resolves preset configuration combined with custom overrides. */
+  static resolveStyle(options: KineticASSOptions = {}): SubtitleStyleConfig {
+    const presetKey = (options.style || 'default').toLowerCase() as SubtitleStylePreset;
+    const base = isSubtitleStylePreset(presetKey)
+      ? SUBTITLE_STYLE_PRESETS[presetKey]
+      : SUBTITLE_STYLE_PRESETS.default;
+
+    return {
+      ...base,
+      fontSize: options.fontSize || base.fontSize,
+      primaryColor: options.primaryColor || base.primaryColor,
+      highlightColor: options.highlightColor || base.highlightColor,
+      marginV: options.marginV || base.marginV
+    };
+  }
+
   /**
    * Generates an ASS (Advanced SubStation Alpha) subtitle script with kinetic
-   * word highlighting — the active word turns amber and bounces.
-   *
-   * - Lower-third alignment, above the TikTok/Reels UI safe zone
-   * - Active words are capped so captions never linger through a pause
-   * - Groups break on silence so captions disappear during gaps
+   * word highlighting and selectable typography style preset.
    */
   static generateKineticASS(words: WordTimestamp[], options: KineticASSOptions = {}): string {
-    const fontSize = options.fontSize || ASS_DEFAULTS.fontSize;
-    const primaryColor = options.primaryColor || ASS_DEFAULTS.primaryColor;
-    const highlightColor = options.highlightColor || ASS_DEFAULTS.highlightColor;
+    const style = ASSGenerator.resolveStyle(options);
     const maxWordDuration = options.maxWordDuration || ASS_DEFAULTS.maxWordDuration;
     const gapThreshold = options.gapThreshold || ASS_DEFAULTS.gapThreshold;
     const groupSize = options.wordsPerGroup || ASS_DEFAULTS.wordsPerGroup;
@@ -102,7 +202,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: KineticTitle, Arial Black, ${fontSize}, ${primaryColor}, &H000000FF, &H00000000, &H80000000, -1, 0, 0, 0, 100, 100, 2, 0, 1, 5, 2, 2, 50, 50, 360, 1
+Style: KineticTitle, ${style.fontName}, ${style.fontSize}, ${style.primaryColor}, &H000000FF, ${style.outlineColor}, ${style.backColor}, ${style.bold}, ${style.italic}, 0, 0, 100, 100, ${style.spacing}, 0, 1, ${style.outline}, ${style.shadow}, 2, 50, 50, ${style.marginV}, 1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -116,8 +216,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         const activeWord = group[j];
         const startTime = activeWord.start;
 
-        // Hold until the next word starts; cap the trailing word so it does not
-        // linger across a pause.
         let endTime =
           j < group.length - 1
             ? group[j + 1].start
@@ -128,11 +226,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         }
 
         const textParts = group.map((w, idx) => {
-          const cleanText = w.word.trim().toUpperCase().replace(/[{}]/g, '');
+          const raw = w.word.trim().replace(/[{}]/g, '');
+          const formatted = style.uppercase ? raw.toUpperCase() : raw;
           if (idx === j) {
-            return `{\\c${highlightColor}\\t(0,80,\\fscx112\\fscy112)\\t(80,160,\\fscx100\\fscy100)}${cleanText}{\\r}`;
+            const scale = style.scaleFactor;
+            return `{\\c${style.highlightColor}\\t(0,80,\\fscx${scale}\\fscy${scale})\\t(80,160,\\fscx100\\fscy100)}${formatted}{\\r}`;
           }
-          return `{\\c${primaryColor}}${cleanText}{\\r}`;
+          return `{\\c${style.primaryColor}}${formatted}{\\r}`;
         });
 
         lines.push(
@@ -148,8 +248,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   static formatTime(seconds: number): string {
     const total = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
 
-    // Round to centiseconds first: deriving fields from `total % 1` turns
-    // 5.3 into 5.29 because of binary floating point.
     const totalCs = Math.round(total * 100);
     const cs = totalCs % 100;
     const totalSecs = (totalCs - cs) / 100;

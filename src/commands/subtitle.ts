@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
-import { ASSGenerator, type WordTimestamp } from '@/core/ass';
+import { ASSGenerator, type SubtitleStylePreset, type WordTimestamp } from '@/core/ass';
 import { config } from '@/core/config';
 import { FFmpegRunner } from '@/core/ffmpeg';
 import { CliError, getErrorMessage } from '@/utils/errors';
@@ -10,9 +10,13 @@ import { resolveMediaInput } from '@/utils/path';
 export interface SubtitleCommandOptions {
   timestamps?: string;
   sub?: string;
+  style?: string;
   fontSize?: string;
   primaryColor?: string;
   highlightColor?: string;
+  bgm?: string;
+  bgmVolume?: string;
+  ducking?: boolean;
   output?: string;
 }
 
@@ -61,6 +65,7 @@ export async function subtitleCommand(videoPath: string, options: SubtitleComman
     const words = readWordsFromJson(subPath);
 
     const assContent = ASSGenerator.generateKineticASS(words, {
+      style: (options.style || 'default') as SubtitleStylePreset,
       fontSize: parseFontSize(options.fontSize),
       primaryColor: options.primaryColor,
       highlightColor: options.highlightColor
@@ -68,17 +73,41 @@ export async function subtitleCommand(videoPath: string, options: SubtitleComman
 
     burnAssPath = join(config.transcriptDir, `${baseName}.kinetic.ass`);
     writeFileSync(burnAssPath, assContent, 'utf-8');
-    logger.success(`Generated kinetic subtitle ASS: ${burnAssPath}`);
+    logger.success(
+      `Generated kinetic subtitle ASS [style=${options.style || 'default'}]: ${burnAssPath}`
+    );
   }
 
-  const output = options.output
-    ? resolve(options.output)
-    : join(config.outputDir, `${baseName}_subtitled.mp4`);
+  const intermediateOutput = options.bgm
+    ? join(config.segmentDir, `${baseName}_subtitled.temp.mp4`)
+    : options.output
+      ? resolve(options.output)
+      : join(config.outputDir, `${baseName}_subtitled.mp4`);
 
-  logger.info(`Burning subtitle (${burnAssPath}) into ${output}...`);
+  logger.info(`Burning subtitle (${burnAssPath}) into ${intermediateOutput}...`);
+  await FFmpegRunner.burnSubtitles(input, burnAssPath, intermediateOutput);
 
-  await FFmpegRunner.burnSubtitles(input, burnAssPath, output);
-  logger.success(`🎉 Subtitled video rendered: ${output}`);
+  let finalOutput = intermediateOutput;
+
+  if (options.bgm) {
+    const bgmPath = resolveMediaInput(options.bgm);
+    if (!existsSync(bgmPath)) {
+      throw new CliError(`BGM audio file not found: ${options.bgm} (Checked: ${bgmPath})`);
+    }
+
+    finalOutput = options.output
+      ? resolve(options.output)
+      : join(config.outputDir, `${baseName}_subtitled.mp4`);
+
+    logger.info(`Mixing BGM audio with sidechain ducking into ${finalOutput}...`);
+    const bgmVol = options.bgmVolume ? Number.parseFloat(options.bgmVolume) : 0.2;
+    await FFmpegRunner.mixBgm(intermediateOutput, bgmPath, finalOutput, {
+      bgmVolume: Number.isFinite(bgmVol) ? bgmVol : 0.2,
+      ducking: options.ducking !== false
+    });
+  }
+
+  logger.success(`🎉 Subtitled video rendered: ${finalOutput}`);
 }
 
 /** Parses `--font-size`, rejecting values that would produce unreadable ASS. */

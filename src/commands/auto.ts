@@ -7,6 +7,7 @@ import { ASSGenerator } from '@/core/ass';
 import { config } from '@/core/config';
 import { FFmpegRunner } from '@/core/ffmpeg';
 import { type TimeSelectionOptions, resolveTimeSelection, selectionSuffix } from '@/core/selection';
+import { findSpeechIntervals, shiftWordTimestamps } from '@/core/transcript';
 import { WhisperClient } from '@/core/whisper';
 import { YouTubeDownloader } from '@/core/youtube';
 import { CliError } from '@/utils/errors';
@@ -25,9 +26,15 @@ export interface AutoCommandOptions extends TimeSelectionOptions {
   blur?: boolean;
   center?: boolean;
   lang?: string;
+  style?: string;
   fontSize?: string;
   primaryColor?: string;
   highlightColor?: string;
+  silenceTrim?: boolean;
+  silenceGap?: string;
+  bgm?: string;
+  bgmVolume?: string;
+  ducking?: boolean;
   draft?: boolean;
   burn?: boolean;
   subtitles?: boolean;
@@ -61,7 +68,8 @@ export async function autoCommand(videoOrUrl: string, options: AutoCommandOption
   const selection = resolveTimeSelection(options);
   const skipSubtitles = shouldSkipSubtitles(options);
 
-  const totalSteps = (selection.hasSelection ? 1 : 0) + (skipSubtitles ? 1 : 3);
+  const totalSteps =
+    (selection.hasSelection ? 1 : 0) + (skipSubtitles ? 1 : 3) + (options.bgm ? 1 : 0);
   let currentStep = 1;
 
   // 2. Cut the requested segment.
@@ -100,12 +108,29 @@ export async function autoCommand(videoOrUrl: string, options: AutoCommandOption
 
   // 4. Clean-video shortcut.
   if (skipSubtitles) {
+    let cleanVideo = framedOut;
+    if (options.bgm) {
+      const bgmPath = resolveMediaInput(options.bgm);
+      if (!existsSync(bgmPath)) {
+        throw new CliError(`BGM audio file not found: ${options.bgm} (Checked: ${bgmPath})`);
+      }
+      logger.step(currentStep++, totalSteps, 'Mixing BGM audio with sidechain ducking...');
+      const mixedOut = join(config.segmentDir, `${transcriptBase}_clean_bgm.mp4`);
+      const bgmVol = options.bgmVolume ? Number.parseFloat(options.bgmVolume) : 0.2;
+      await FFmpegRunner.mixBgm(cleanVideo, bgmPath, mixedOut, {
+        bgmVolume: Number.isFinite(bgmVol) ? bgmVol : 0.2,
+        ducking: options.ducking !== false
+      });
+      cleanVideo = mixedOut;
+      logger.success(`BGM mixed: ${mixedOut}`);
+    }
+
     const finalOutput = options.output
       ? resolve(options.output)
       : join(finalDir, `${transcriptBase}_${aspectSlug}_clean.mp4`);
 
-    if (resolve(framedOut) !== resolve(finalOutput)) {
-      copyFileSync(framedOut, finalOutput);
+    if (resolve(cleanVideo) !== resolve(finalOutput)) {
+      copyFileSync(cleanVideo, finalOutput);
     }
 
     console.log('');
@@ -138,28 +163,78 @@ export async function autoCommand(videoOrUrl: string, options: AutoCommandOption
 
   logger.success(`Transcription ready: ${whisperRes.words.length} words -> ${transcriptJsonPath}`);
 
-  // 6. Generate the kinetic subtitle script.
-  const assContent = ASSGenerator.generateKineticASS(whisperRes.words, {
+  let activeVideo = framedOut;
+  let activeWords = whisperRes.words;
+
+  // 6. Silence & filler pause trimming (Optional).
+  if (options.silenceTrim) {
+    const maxGap = options.silenceGap ? Number.parseFloat(options.silenceGap) : 0.6;
+    const intervals = findSpeechIntervals(activeWords, {
+      maxGap: Number.isFinite(maxGap) ? maxGap : 0.6
+    });
+
+    if (intervals.length > 1) {
+      logger.info(`Detected ${intervals.length} speech segments, trimming pauses...`);
+      const trimmedOut = join(config.segmentDir, `${baseName}_trimmed.mp4`);
+      await FFmpegRunner.trimSilence(activeVideo, trimmedOut, intervals);
+      activeWords = shiftWordTimestamps(activeWords, intervals);
+      activeVideo = trimmedOut;
+      logger.success(`Silence trimmed: ${trimmedOut}`);
+    }
+  }
+
+  // 7. Generate the kinetic subtitle script.
+  const assContent = ASSGenerator.generateKineticASS(activeWords, {
+    style: options.style || 'default',
     fontSize: parseFontSize(options.fontSize),
     primaryColor: options.primaryColor,
     highlightColor: options.highlightColor
   });
   writeFileSync(assPath, assContent, 'utf-8');
-  logger.success(`Subtitle script generated: ${assPath}`);
+  logger.success(`Subtitle script generated [style=${options.style || 'default'}]: ${assPath}`);
 
-  // 7. Stop here in draft mode so the ASS can be reviewed by hand.
+  // 8. Stop here in draft mode so the ASS can be reviewed by hand.
   if (isDraftRun(options)) {
-    printDraftSummary(framedOut, assPath, transcriptJsonPath, transcriptBase);
+    printDraftSummary(activeVideo, assPath, transcriptJsonPath, transcriptBase);
     return;
   }
 
-  // 8. Burn the animated kinetic typography.
-  logger.step(currentStep++, totalSteps, 'Burning animated kinetic typography into final video...');
+  // 9. Burn the animated kinetic typography.
+  logger.step(currentStep++, totalSteps, 'Burning animated kinetic typography into video...');
+  const burnedOutput = join(config.segmentDir, `${transcriptBase}_burned.mp4`);
+  await FFmpegRunner.burnSubtitles(activeVideo, assPath, burnedOutput);
+
+  let finalRenderedVideo = burnedOutput;
+
+  // 10. Mix BGM with Sidechain Ducking (Optional).
+  if (options.bgm) {
+    const bgmPath = resolveMediaInput(options.bgm);
+    if (!existsSync(bgmPath)) {
+      throw new CliError(`BGM audio file not found: ${options.bgm} (Checked: ${bgmPath})`);
+    }
+    logger.step(
+      currentStep++,
+      totalSteps,
+      'Mixing background music (BGM) with sidechain ducking...'
+    );
+    const mixedWithBgm = join(config.segmentDir, `${transcriptBase}_with_bgm.mp4`);
+    const bgmVol = options.bgmVolume ? Number.parseFloat(options.bgmVolume) : 0.2;
+    await FFmpegRunner.mixBgm(burnedOutput, bgmPath, mixedWithBgm, {
+      bgmVolume: Number.isFinite(bgmVol) ? bgmVol : 0.2,
+      ducking: options.ducking !== false
+    });
+    finalRenderedVideo = mixedWithBgm;
+    logger.success(`BGM mixed with ducking: ${mixedWithBgm}`);
+  }
+
   const finalOutput = options.output
     ? resolve(options.output)
     : join(finalDir, `${transcriptBase}_short.mp4`);
 
-  await FFmpegRunner.burnSubtitles(framedOut, assPath, finalOutput);
+  if (resolve(finalRenderedVideo) !== resolve(finalOutput)) {
+    copyFileSync(finalRenderedVideo, finalOutput);
+  }
+
   logger.success('🎉 Render complete! Final video saved to:');
   console.log(`👉 ${finalOutput}`);
 }
@@ -187,14 +262,14 @@ function printDraftSummary(
 ): void {
   console.log('');
   logger.success('✨ DRAFT GENERATED SUCCESSFULLY (No burn mode)');
-  console.log('---------------------------------------------------------');
-  console.log(`📹 Video Segment  : ${framedOut}`);
-  console.log(`📝 Subtitle Script: ${assPath}`);
-  console.log(`📊 Word Timestamps: ${transcriptJsonPath}`);
-  console.log('---------------------------------------------------------');
-  console.log('💡 To review & edit text: Open the .ass file in any editor.');
-  console.log('💡 When ready to burn final video:');
+  console.log('='.repeat(60));
+  console.log(`1. Framed Video   : ${framedOut}`);
+  console.log(`2. Subtitle Script: ${assPath}`);
+  console.log(`3. Word Timestamps: ${transcriptJsonPath}`);
+  console.log('='.repeat(60));
+  console.log('Edit the .ass file styling or text as needed, then burn using:');
   console.log(
-    `   nouclip subtitle "${framedOut}" --sub "${assPath}" -o "${join(config.outputDir, `${transcriptBase}_final.mp4`)}"`
+    `👉 nouclip subtitle "${framedOut}" --sub "${assPath}" -o "${transcriptBase}_short.mp4"`
   );
+  console.log('');
 }

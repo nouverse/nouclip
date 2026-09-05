@@ -33,6 +33,12 @@ export interface ReframeOptions {
   targetHeight?: number;
 }
 
+export interface MixBgmOptions {
+  bgmVolume?: number;
+  ducking?: boolean;
+  hasAudio?: boolean;
+}
+
 /** Shared x264 output settings so every re-encoding path stays consistent. */
 const X264_OUTPUT = [
   '-c:v',
@@ -46,6 +52,10 @@ const X264_OUTPUT = [
   '-c:a',
   'copy'
 ];
+
+function formatArgTime(seconds: number): string {
+  return Number(seconds.toFixed(3)).toString();
+}
 
 export class FFmpegRunner {
   static getFFmpegPath(): string {
@@ -98,15 +108,15 @@ export class FFmpegRunner {
       default: {
         if (clean.includes(':')) {
           const [w, h] = clean.split(':').map(Number);
-          if (w > 0 && h > 0 && Number.isFinite(w) && Number.isFinite(h)) {
-            if (w < h) {
-              const targetW = 1080;
-              const targetH = Math.round((1080 * h) / w / 2) * 2;
-              return { width: targetW, height: targetH, name: `${w}:${h}` };
+          if (w > 0 && h > 0) {
+            if (w >= h) {
+              const height = 1080;
+              const width = Math.round((height * w) / h / 2) * 2;
+              return { width, height, name: `${w}:${h}` };
             }
-            const targetH = 1080;
-            const targetW = Math.round((1080 * w) / h / 2) * 2;
-            return { width: targetW, height: targetH, name: `${w}:${h}` };
+            const width = 1080;
+            const height = Math.round((width * h) / w / 2) * 2;
+            return { width, height, name: `${w}:${h}` };
           }
         }
         return { width: 1080, height: 1920, name: '9:16' };
@@ -114,45 +124,13 @@ export class FFmpegRunner {
     }
   }
 
-  /** Filesystem-safe form of an aspect name, e.g. `9:16` -> `9x16`. */
   static aspectSlug(preset: AspectRatioPreset): string {
     return preset.name.replace(':', 'x');
   }
 
   // ---------------------------------------------------------------------------
-  // Pure argument builders (unit-tested without touching ffmpeg)
+  // Argument builders — pure, isolated, directly testable.
   // ---------------------------------------------------------------------------
-
-  static buildExtractAudioArgs(
-    videoPath: string,
-    outputPath: string,
-    options: { sampleRate?: number; start?: number; duration?: number } = {}
-  ): string[] {
-    const args = ['-y'];
-
-    if (options.start !== undefined) {
-      args.push('-ss', options.start.toString());
-    }
-
-    args.push('-i', videoPath);
-
-    if (options.duration !== undefined) {
-      args.push('-t', options.duration.toString());
-    }
-
-    args.push(
-      '-vn',
-      '-acodec',
-      'pcm_s16le',
-      '-ar',
-      (options.sampleRate || 16000).toString(),
-      '-ac',
-      '1',
-      outputPath
-    );
-
-    return args;
-  }
 
   static buildCutArgs(
     inputPath: string,
@@ -161,28 +139,56 @@ export class FFmpegRunner {
     duration: number,
     reencode = false
   ): string[] {
-    const args = ['-y', '-ss', start.toString(), '-i', inputPath, '-t', duration.toString()];
+    const args: string[] = [
+      '-y',
+      '-ss',
+      formatArgTime(start),
+      '-i',
+      inputPath,
+      '-t',
+      formatArgTime(duration)
+    ];
 
-    if (!reencode) {
-      args.push('-c', 'copy', outputPath);
-      return args;
+    if (reencode) {
+      args.push(
+        '-c:v',
+        'libx264',
+        '-preset',
+        'fast',
+        '-crf',
+        '18',
+        '-pix_fmt',
+        'yuv420p',
+        '-c:a',
+        'aac',
+        '-b:a',
+        '192k'
+      );
+    } else {
+      args.push('-c', 'copy', '-avoid_negative_ts', 'make_zero');
     }
 
-    args.push(
-      '-c:v',
-      'libx264',
-      '-preset',
-      'veryfast',
-      '-crf',
-      '18',
-      '-pix_fmt',
-      'yuv420p',
-      '-c:a',
-      'aac',
-      '-b:a',
-      '192k',
-      outputPath
-    );
+    args.push(outputPath);
+    return args;
+  }
+
+  static buildExtractAudioArgs(
+    videoPath: string,
+    outputPath: string,
+    options: { sampleRate?: number; start?: number; duration?: number } = {}
+  ): string[] {
+    const args: string[] = ['-y'];
+
+    if (options.start !== undefined) {
+      args.push('-ss', formatArgTime(options.start));
+    }
+    args.push('-i', videoPath);
+    if (options.duration !== undefined) {
+      args.push('-t', formatArgTime(options.duration));
+    }
+
+    const sampleRate = options.sampleRate || 16000;
+    args.push('-vn', '-acodec', 'pcm_s16le', '-ar', sampleRate.toString(), '-ac', '1', outputPath);
     return args;
   }
 
@@ -194,7 +200,7 @@ export class FFmpegRunner {
     const preset = FFmpegRunner.parseAspectRatio(options.aspect || '9:16');
     const tw = options.targetWidth || preset.width;
     const th = options.targetHeight || preset.height;
-    const mode = options.mode || 'blur';
+    const mode: FramingMode = options.mode || 'blur';
 
     if (mode === 'blur') {
       const filter = [
@@ -235,6 +241,167 @@ export class FFmpegRunner {
       '-vf',
       `ass='${FFmpegRunner.escapeFilterPath(assPath)}'`,
       ...X264_OUTPUT,
+      outputPath
+    ];
+  }
+
+  static buildMixBgmArgs(
+    videoPath: string,
+    bgmPath: string,
+    outputPath: string,
+    options: MixBgmOptions = {}
+  ): string[] {
+    const bgmVolume = options.bgmVolume ?? 0.2;
+    const ducking = options.ducking !== false;
+    const hasAudio = options.hasAudio !== false;
+
+    if (!hasAudio) {
+      return [
+        '-y',
+        '-i',
+        videoPath,
+        '-stream_loop',
+        '-1',
+        '-i',
+        bgmPath,
+        '-filter_complex',
+        `[1:a]volume=${bgmVolume}[aout]`,
+        '-map',
+        '0:v',
+        '-map',
+        '[aout]',
+        '-c:v',
+        'copy',
+        '-c:a',
+        'aac',
+        '-b:a',
+        '192k',
+        '-shortest',
+        outputPath
+      ];
+    }
+
+    let audioFilter: string;
+    if (ducking) {
+      audioFilter = [
+        `[1:a]volume=${bgmVolume}[bgm_vol]`,
+        '[bgm_vol][0:a]sidechaincompress=threshold=0.12:ratio=4:attack=50:release=350[ducked_bgm]',
+        '[0:a][ducked_bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]'
+      ].join(';');
+    } else {
+      audioFilter = [
+        `[1:a]volume=${bgmVolume}[bgm_vol]`,
+        '[0:a][bgm_vol]amix=inputs=2:duration=first:dropout_transition=2[aout]'
+      ].join(';');
+    }
+
+    return [
+      '-y',
+      '-i',
+      videoPath,
+      '-stream_loop',
+      '-1',
+      '-i',
+      bgmPath,
+      '-filter_complex',
+      audioFilter,
+      '-map',
+      '0:v',
+      '-map',
+      '[aout]',
+      '-c:v',
+      'copy',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '192k',
+      '-shortest',
+      outputPath
+    ];
+  }
+
+  static buildTrimSilenceArgs(
+    inputPath: string,
+    outputPath: string,
+    intervals: Array<{ start: number; end: number }>,
+    hasAudio = true
+  ): string[] {
+    if (intervals.length === 0) {
+      throw new Error('At least one speech interval is required for trimming');
+    }
+
+    if (intervals.length === 1) {
+      const { start, end } = intervals[0];
+      return FFmpegRunner.buildCutArgs(inputPath, outputPath, start, end - start, true);
+    }
+
+    const videoSegments: string[] = [];
+    const audioSegments: string[] = [];
+    const concatInputs: string[] = [];
+
+    intervals.forEach((int, idx) => {
+      videoSegments.push(
+        `[0:v]trim=start=${formatArgTime(int.start)}:end=${formatArgTime(int.end)},setpts=PTS-STARTPTS[v${idx}]`
+      );
+      concatInputs.push(`[v${idx}]`);
+
+      if (hasAudio) {
+        audioSegments.push(
+          `[0:a]atrim=start=${formatArgTime(int.start)}:end=${formatArgTime(int.end)},asetpts=PTS-STARTPTS[a${idx}]`
+        );
+        concatInputs.push(`[a${idx}]`);
+      }
+    });
+
+    const filterParts = [...videoSegments, ...audioSegments];
+    const n = intervals.length;
+    const aParam = hasAudio ? 1 : 0;
+
+    if (hasAudio) {
+      filterParts.push(`${concatInputs.join('')}concat=n=${n}:v=1:a=${aParam}[v][a]`);
+      return [
+        '-y',
+        '-i',
+        inputPath,
+        '-filter_complex',
+        filterParts.join(';'),
+        '-map',
+        '[v]',
+        '-map',
+        '[a]',
+        '-c:v',
+        'libx264',
+        '-preset',
+        'fast',
+        '-crf',
+        '18',
+        '-pix_fmt',
+        'yuv420p',
+        '-c:a',
+        'aac',
+        '-b:a',
+        '192k',
+        outputPath
+      ];
+    }
+
+    filterParts.push(`${concatInputs.join('')}concat=n=${n}:v=1:a=0[v]`);
+    return [
+      '-y',
+      '-i',
+      inputPath,
+      '-filter_complex',
+      filterParts.join(';'),
+      '-map',
+      '[v]',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'fast',
+      '-crf',
+      '18',
+      '-pix_fmt',
+      'yuv420p',
       outputPath
     ];
   }
@@ -371,49 +538,81 @@ export class FFmpegRunner {
       try {
         rmSync(stageDir, { recursive: true, force: true });
       } catch {
-        /* best-effort cleanup */
+        // Ignored.
       }
     }
   }
 
-  /** Runs a binary, rejecting on a non-zero exit or a spawn failure. */
-  static async run(bin: string, args: string[]): Promise<void> {
-    await FFmpegRunner.exec(bin, args);
+  static async mixBgm(
+    videoPath: string,
+    bgmPath: string,
+    outputPath: string,
+    options: MixBgmOptions = {}
+  ): Promise<void> {
+    await FFmpegRunner.run(
+      FFmpegRunner.getFFmpegPath(),
+      FFmpegRunner.buildMixBgmArgs(videoPath, bgmPath, outputPath, options)
+    );
   }
 
-  static exec(bin: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
+  static async trimSilence(
+    inputPath: string,
+    outputPath: string,
+    intervals: Array<{ start: number; end: number }>,
+    hasAudio = true
+  ): Promise<void> {
+    await FFmpegRunner.run(
+      FFmpegRunner.getFFmpegPath(),
+      FFmpegRunner.buildTrimSilenceArgs(inputPath, outputPath, intervals, hasAudio)
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Low-level process runner
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Executes a command and captures stdout.
+   * Throws with the captured stderr when the exit code is non-zero.
+   */
+  static exec(command: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
-      const proc = spawn(bin, args);
+      const proc = spawn(command, args);
       let stdout = '';
       let stderr = '';
 
-      proc.stdout?.on('data', (d) => {
-        stdout += d.toString();
-      });
-      proc.stderr?.on('data', (d) => {
-        stderr += d.toString();
+      proc.stdout.on('data', (data: Buffer) => {
+        stdout += data.toString();
       });
 
-      // Without this, a missing binary raises an unhandled 'error' event.
+      proc.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
+
       proc.on('error', (err: NodeJS.ErrnoException) => {
         if (err.code === 'ENOENT') {
           reject(
             new Error(
-              `"${basename(bin)}" not found. Install FFmpeg or set NOUCLIP_FFMPEG_PATH / NOUCLIP_FFPROBE_PATH.`
+              `"${basename(command)}" not found. Install FFmpeg or set NOUCLIP_FFMPEG_PATH / NOUCLIP_FFPROBE_PATH.`
             )
           );
-          return;
+        } else {
+          reject(err);
         }
-        reject(err);
       });
 
       proc.on('close', (code) => {
-        if (code === 0) {
+        if (code !== 0) {
+          reject(new Error(`Command failed (exit ${code}): ${command}\n${stderr}`));
+        } else {
           resolve({ stdout, stderr });
-          return;
         }
-        reject(new Error(`${basename(bin)} error (exit ${code}): ${stderr.slice(-500)}`));
       });
     });
+  }
+
+  /** Run a command without capturing stdout; errors still unwrap stderr. */
+  static async run(command: string, args: string[]): Promise<void> {
+    await FFmpegRunner.exec(command, args);
   }
 }

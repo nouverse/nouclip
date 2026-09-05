@@ -82,7 +82,21 @@ program
   .option('--no-subs', 'Alias for --no-subtitles')
   .option('--no-subtitle', 'Alias for --no-subtitles')
   .option('-l, --lang <lang>', "Language for Whisper transcription (default: 'id')", 'id')
+  .option(
+    '--style <preset>',
+    'Subtitle typography style preset: "default", "hormozi", "storyteller", "cinematic" (default: "default")',
+    'default'
+  )
   .option('--font-size <size>', 'Subtitle font size (default: 60)', '60')
+  .option('--silence-trim', 'Auto-trim silent pauses (>0.6s) between words for faster pacing')
+  .option(
+    '--silence-gap <seconds>',
+    'Silence threshold in seconds before trimming (default: 0.6)',
+    '0.6'
+  )
+  .option('--bgm <path>', 'Background music track to mix with sidechain ducking')
+  .option('--bgm-volume <volume>', 'BGM audio volume factor (default: 0.2)', '0.2')
+  .option('--no-ducking', 'Disable sidechain audio ducking (constant volume BGM mix)')
   .option(
     '--draft',
     'Generate segment, audio, and subtitle files but pause before burning for review'
@@ -169,9 +183,17 @@ program
   .description('Burn animated kinetic subtitles into video from .ass file or .json word timestamps')
   .option('-s, --sub <path>', 'Path to .ass subtitle file or .json word timestamps')
   .option('-t, --timestamps <json>', 'Path to Whisper word timestamps JSON (alias for --sub)')
+  .option(
+    '--style <preset>',
+    'Subtitle typography style preset: "default", "hormozi", "storyteller", "cinematic" (default: "default")',
+    'default'
+  )
   .option('--font-size <size>', 'Font size (default: 60)', '60')
   .option('--primary-color <hex>', 'Inactive text color (default: &H00FFFFFF&)')
   .option('--highlight-color <hex>', 'Active animated word color (default: &H0000FFFF&)')
+  .option('--bgm <path>', 'Background music track to mix with sidechain ducking')
+  .option('--bgm-volume <volume>', 'BGM audio volume factor (default: 0.2)', '0.2')
+  .option('--no-ducking', 'Disable sidechain audio ducking (constant volume BGM mix)')
   .option('-o, --output <path>', 'Output MP4 path')
   .action(action(subtitleCommand));
 
@@ -189,15 +211,11 @@ program
   .option('--min-duration <seconds>', 'Minimum clip duration in seconds (default: 25)', '25')
   .option('--max-duration <seconds>', 'Maximum clip duration in seconds (default: 60)', '60')
   .option(
-    '--base-url <url>',
-    'OpenAI-compatible Base URL (e.g. https://api.openai.com/v1, http://localhost:11434/v1)'
+    '--budget <seconds>',
+    'Total duration target across all suggested clips (default: 180)',
+    '180'
   )
-  .option('--api-key <key>', 'LLM API Key')
-  .option(
-    '--model <model>',
-    "LLM model name (e.g. 'gpt-4o-mini', 'llama-3.3-70b-versatile', 'llama3.2')"
-  )
-  .option('-o, --output <path>', 'Output highlights JSON path')
+  .option('-o, --output <path>', 'Output JSON file to save suggested highlight clips')
   .action(action(highlightCommand));
 
 program.parse(process.argv);

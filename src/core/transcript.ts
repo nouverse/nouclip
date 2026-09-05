@@ -14,6 +14,20 @@ export interface TranscriptData {
   duration?: number;
 }
 
+export interface SpeechInterval {
+  start: number;
+  end: number;
+}
+
+export interface SilenceTrimOptions {
+  /** Maximum silence gap allowed between words before trimming. Default: 0.6s */
+  maxGap?: number;
+  /** Padding around speech segments in seconds. Default: 0.1s */
+  pad?: number;
+  /** Total media duration. */
+  totalDuration?: number;
+}
+
 /** Splits words into fixed-size cue groups. */
 export function groupWords(words: WordTimestamp[], size: number): WordTimestamp[][] {
   if (size <= 0) throw new Error('Group size must be greater than 0');
@@ -57,6 +71,101 @@ export function groupParagraphs(
   }
 
   return paragraphs;
+}
+
+/**
+ * Computes non-silent speech intervals from word timestamps.
+ * Gaps longer than `maxGap` are excised while adding `pad` margins
+ * around active speech.
+ */
+export function findSpeechIntervals(
+  words: WordTimestamp[],
+  options: SilenceTrimOptions = {}
+): SpeechInterval[] {
+  if (!words || words.length === 0) {
+    if (options.totalDuration && options.totalDuration > 0) {
+      return [{ start: 0, end: options.totalDuration }];
+    }
+    return [];
+  }
+
+  const maxGap = options.maxGap ?? 0.6;
+  const pad = options.pad ?? 0.1;
+  const totalDuration = options.totalDuration ?? words[words.length - 1].end + pad;
+
+  const intervals: SpeechInterval[] = [];
+  let currentStart = Math.max(0, words[0].start - pad);
+  let currentEnd = words[0].end + pad;
+
+  for (let i = 1; i < words.length; i++) {
+    const word = words[i];
+    const gap = word.start - words[i - 1].end;
+
+    if (gap > maxGap) {
+      // End current interval and start a new one
+      intervals.push({
+        start: Number(currentStart.toFixed(3)),
+        end: Number(Math.min(currentEnd, totalDuration).toFixed(3))
+      });
+      currentStart = Math.max(0, word.start - pad);
+      currentEnd = word.end + pad;
+    } else {
+      // Extend current interval
+      currentEnd = word.end + pad;
+    }
+  }
+
+  intervals.push({
+    start: Number(currentStart.toFixed(3)),
+    end: Number(Math.min(currentEnd, totalDuration).toFixed(3))
+  });
+
+  return intervals.filter((int) => int.end > int.start);
+}
+
+/**
+ * Recalculates word timestamp timings after silence intervals have been excised.
+ * Aligns subtitles frame-accurately with the trimmed video output.
+ */
+export function shiftWordTimestamps(
+  words: WordTimestamp[],
+  intervals: SpeechInterval[]
+): WordTimestamp[] {
+  if (intervals.length === 0) return [];
+
+  const shifted: WordTimestamp[] = [];
+
+  for (const word of words) {
+    let accumulatedTime = 0;
+    let placed = false;
+
+    for (const interval of intervals) {
+      const intervalDuration = interval.end - interval.start;
+
+      // Check if word falls in or intersects this interval
+      if (word.end >= interval.start && word.start <= interval.end) {
+        const relativeStart = Math.max(0, word.start - interval.start);
+        const relativeEnd = Math.max(relativeStart + 0.1, word.end - interval.start);
+
+        shifted.push({
+          ...word,
+          start: Number((accumulatedTime + relativeStart).toFixed(3)),
+          end: Number((accumulatedTime + relativeEnd).toFixed(3))
+        });
+        placed = true;
+        break;
+      }
+
+      accumulatedTime += intervalDuration;
+    }
+
+    if (!placed) {
+      // If outside trimmed boundaries, clamp to nearest interval
+      shifted.push({ ...word });
+    }
+  }
+
+  return shifted;
 }
 
 export function toSrt(words: WordTimestamp[], wordsPerCue = 4): string {

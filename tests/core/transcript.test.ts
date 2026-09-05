@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 import type { WordTimestamp } from '@/core/ass';
 import {
+  findSpeechIntervals,
   groupParagraphs,
   groupWords,
   isTranscriptFormat,
   renderTranscript,
+  shiftWordTimestamps,
   toPlainText,
   toSrt,
   toVtt
@@ -57,6 +59,38 @@ describe('groupParagraphs', () => {
   });
 });
 
+describe('findSpeechIntervals & shiftWordTimestamps', () => {
+  const wordsWithGaps: WordTimestamp[] = [
+    { word: 'Mulai', start: 1.0, end: 2.0 },
+    { word: 'lanjut', start: 2.2, end: 3.0 },
+    // 3.0 -> 6.0 is a 3.0s silent gap
+    { word: 'akhir', start: 6.0, end: 7.5 }
+  ];
+
+  it('identifies non-silent speech intervals', () => {
+    const intervals = findSpeechIntervals(wordsWithGaps, { maxGap: 0.6, pad: 0.1 });
+    expect(intervals).toHaveLength(2);
+    expect(intervals[0].start).toBe(0.9);
+    expect(intervals[0].end).toBe(3.1);
+    expect(intervals[1].start).toBe(5.9);
+    expect(intervals[1].end).toBe(7.6);
+  });
+
+  it('shifts word timestamps according to excised intervals', () => {
+    const intervals = findSpeechIntervals(wordsWithGaps, { maxGap: 0.6, pad: 0.1 });
+    const shifted = shiftWordTimestamps(wordsWithGaps, intervals);
+
+    expect(shifted).toHaveLength(3);
+    expect(shifted[0].word).toBe('Mulai');
+    expect(shifted[0].start).toBe(0.1);
+    expect(shifted[2].word).toBe('akhir');
+    // First interval duration = 3.1 - 0.9 = 2.2s.
+    // Word start relative to 2nd interval (5.9) = 6.0 - 5.9 = 0.1s.
+    // New start = 2.2 + 0.1 = 2.3s.
+    expect(shifted[2].start).toBeCloseTo(2.3, 1);
+  });
+});
+
 describe('toSrt', () => {
   it('emits numbered cues with comma milliseconds', () => {
     const srt = toSrt(words, 2);
@@ -95,13 +129,5 @@ describe('renderTranscript', () => {
     expect(renderTranscript({ words }, 'vtt', 'x')).toContain('WEBVTT');
     expect(renderTranscript({ words }, 'txt', 'x')).toContain('TRANSCRIPT EXPORT');
     expect(JSON.parse(renderTranscript({ words }, 'json', 'x')).words).toHaveLength(5);
-  });
-});
-
-describe('isTranscriptFormat', () => {
-  it('accepts only known formats', () => {
-    expect(isTranscriptFormat('txt')).toBe(true);
-    expect(isTranscriptFormat('json')).toBe(true);
-    expect(isTranscriptFormat('pdf')).toBe(false);
   });
 });

@@ -71,6 +71,22 @@ describe('ASSGenerator.generateKineticASS', () => {
     expect(ass.endsWith('\n')).toBe(true);
   });
 
+  it('supports typography presets (hormozi, storyteller, cinematic)', () => {
+    const hormoziAss = ASSGenerator.generateKineticASS(words, { style: 'hormozi' });
+    expect(hormoziAss).toContain('Arial Black');
+    expect(hormoziAss).toContain('&H0000FF00'); // Neon green highlight
+    expect(hormoziAss).toContain('HALO');
+
+    const storytellerAss = ASSGenerator.generateKineticASS(words, { style: 'storyteller' });
+    expect(storytellerAss).toContain('Arial');
+    expect(storytellerAss).toContain('&H0050E3C2'); // Cyan highlight
+    expect(storytellerAss).toContain('Halo'); // Natural case
+
+    const cinematicAss = ASSGenerator.generateKineticASS(words, { style: 'cinematic' });
+    expect(cinematicAss).toContain('Trebuchet MS');
+    expect(cinematicAss).toContain('&H0000A5FF'); // Golden amber
+  });
+
   it('emits one dialogue line per word so each word can be highlighted', () => {
     const dialogues = ASSGenerator.generateKineticASS(words)
       .split('\n')
