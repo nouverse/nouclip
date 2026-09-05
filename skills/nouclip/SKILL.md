@@ -146,13 +146,23 @@ NouClip includes 4 built-in animated ASS kinetic typography presets:
 
 ---
 
-## ✍️ Staged & Draft Review Workflow (Recommended for Agents)
+## ✍️ Staged & Draft Review Workflow (MANDATORY FOR AI AGENTS)
 
-AI Whisper STT can mishear proper nouns, brand names, or slang. Use `--draft` to review transcripts before burning:
+> **⚠️ STRICT DIRECTIVE FOR ALL AI AGENTS:**
+> 1. **ALWAYS use `--draft` (or `--no-burn`) on `nouclip auto` and video clipping.** Never run a blind end-to-end burn in one step.
+> 2. **ALWAYS inspect and edit the intermediate `.ass` transcript** to fix typos, acronyms, or styling before rendering.
+> 3. **MANDATORY USER CONFIRMATION:** Always present the draft cuts, summary, and transcript snippet to the user, and **WAIT for explicit user approval before triggering the final render/burn**.
+
+AI Whisper STT can mishear proper nouns, brand names, or slang. The staging protocol guarantees zero hallucinated/typo subtitles:
 
 ### Step 1: Generate Segment & Subtitle Draft
 ```bash
-nouclip auto "https://youtu.be/EXAMPLE_ID" --range 13:25-14:10 --aspect 9:16 --style hormozi --blur --draft
+nouclip auto "https://youtu.be/EXAMPLE_ID" \
+  --range 13:25-14:10 \
+  --aspect 9:16 \
+  --style hormozi \
+  --blur \
+  --draft
 ```
 Output will return:
 - Segment Video: `~/.nouclip/segments/video_framed_9x16_blur.mp4`
@@ -161,10 +171,23 @@ Output will return:
 ### Step 2: Review & Edit Subtitle
 Read and correct any typos in the `.ass` file:
 ```bash
-# Agent can read and edit the .ass text file directly
+# Agent opens ~/.nouclip/transcripts/<name>.ass and edits words, casing, or styles directly
 ```
 
-### Step 3: Burn Verified Subtitles into Final Video
+### Step 3: Present Draft & Await User Confirmation
+Show the clip proposal and transcript draft to the user:
+```text
+"Draft video & subtitle sudah siap (13:25 - 14:10):
+- Highlight Hook: 'Kenapa kita beralih ke Hono...'
+- Style: Hormozi (Neon Green highlight)
+- Silence Trim: Aktif
+- BGM: lofi_music.mp3 (Ducking aktif)
+
+Apakah klip ini siap di-render ke final MP4?"
+```
+**STOP and wait for the user to confirm. DO NOT proceed to Step 4 until approved.**
+
+### Step 4: Burn Verified Subtitles into Final Video (After Approval)
 ```bash
 nouclip subtitle ~/.nouclip/segments/video_framed_9x16_blur.mp4 \
   --sub ~/.nouclip/transcripts/video_13m25s-14m10s.ass \
