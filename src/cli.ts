@@ -54,8 +54,7 @@ program
   )
   .option(
     '-m, --mode <mode>',
-    'Framing style: "blur" (blurred background), "center" (crop fill), "pad" (letterbox), "stretch" (default: "center")',
-    'center'
+    'Framing style: "blur" (blurred background), "center" (crop fill), "pad" (letterbox), "stretch"'
   )
   .option('--blur', 'Shortcut for --mode blur (blurred background letterbox)')
   .option('-l, --lang <lang>', "Language for Whisper transcription (default: 'id')", 'id')

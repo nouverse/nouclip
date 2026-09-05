@@ -95,7 +95,7 @@ export async function autoCommand(videoPathOrUrl: string, options: AutoCommandOp
 
     // 2. Reframe Aspect Ratio & Mode
     const aspectStr = options.aspect || '9:16';
-    const framingMode: FramingMode = options.mode || (options.blur ? 'blur' : 'center');
+    const framingMode: FramingMode = options.blur ? 'blur' : options.mode || 'center';
     const aspectPreset = FFmpegRunner.parseAspectRatio(aspectStr);
 
     logger.step(
