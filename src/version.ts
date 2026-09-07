@@ -4,4 +4,4 @@
  * Kept in sync with package.json by `tests/version.test.ts` — bump both
  * together, CI fails otherwise.
  */
-export const VERSION = '1.0.0';
+export const VERSION = '1.0.1';
