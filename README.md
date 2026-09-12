@@ -259,7 +259,7 @@ nouclip subtitle input.mp4 --sub captions.ass --bgm music.mp3 --bgm-volume 0.10 
 
 ## 🤖 Let Your AI Agent Use the CLI
 
-NouClip is designed from the ground up to be **agentic-first**. AI coding assistants and autonomous agents (such as [Nouride](https://github.com/nouverse/nouride), Claude Code, Cursor, Cline, OpenClaw, etc.) can inspect storage, reuse cached artifacts, and execute multi-step clipping pipelines deterministically using structured JSON outputs and the bundled skill.
+NouClip is designed from the ground up to be **agentic-first**. AI coding assistants and autonomous agents (such as [Nouride](https://nouride.com), Claude Code, Cursor, Cline, OpenClaw, etc.) can inspect storage, reuse cached artifacts, and execute multi-step clipping pipelines deterministically using structured JSON outputs and the bundled skill.
 
 ---
 
