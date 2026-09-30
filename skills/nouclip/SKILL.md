@@ -1,11 +1,11 @@
 ---
 name: nouclip
-description: CLI video clipping, universal aspect reframing (9:16, 1:1, 4:5), Whisper transcription, kinetic subtitle burning, typography presets, silence trimming, BGM ducking, dependency checks, and installation workflows using NouClip CLI.
+description: CLI video clipping, universal aspect reframing (9:16, 1:1, 4:5), YouTube captions before Whisper transcription, timed transcripts for summarizing a video or YouTube link, kinetic subtitle burning, typography presets, silence trimming, BGM ducking, dependency checks, installation and update workflows using NouClip CLI.
 ---
 
 # NouClip — Agentic Video Clipper & Shorts Engine Skill
 
-Operational instructions and procedures for checking prerequisites, installing dependencies, clipping videos, reframing aspect ratios, transcribing with Whisper, applying typography presets, trimming silence, mixing ducked BGM, and burning kinetic subtitles using the `nouclip` CLI.
+Operational instructions and procedures for checking prerequisites, installing and updating nouclip, clipping videos, reframing aspect ratios, reading YouTube captions or transcribing with Whisper, getting timed transcripts to summarize a video, applying typography presets, trimming silence, mixing ducked BGM, and burning kinetic subtitles using the `nouclip` CLI.
 
 ---
 
@@ -53,6 +53,25 @@ If `nouclip` is **not found** (`command not found` or `ENOENT`), install it usin
   Invoke-WebRequest -Uri "https://github.com/nouverse/nouclip/releases/latest/download/nouclip-windows-x64.exe" -OutFile "$env:LOCALAPPDATA\Microsoft\WindowsApps\nouclip.exe"
   ```
 
+### Updating `nouclip`
+
+There is no self-update command: update the same way it was installed. Find out which from where it lives:
+
+```bash
+command -v nouclip        # ~/.bun/bin → bun · the npm global prefix → npm · /usr/local/bin → standalone
+nouclip --version         # before and after, to confirm
+```
+
+```bash
+bun add -g nouclip@latest          # installed with Bun
+npm install -g nouclip@latest      # installed with npm
+pnpm add -g nouclip@latest         # installed with pnpm
+# Standalone binary: re-run the installer — it always fetches the latest release
+curl -fsSL https://raw.githubusercontent.com/nouverse/nouclip/main/install.sh | bash
+```
+
+Update when a flag in this document is rejected as unknown (`error: unknown option`): the installed nouclip is older than these instructions — `--captions`, and YouTube links on `transcript` and `highlight`, are recent.
+
 ### 2. Check & Install System Dependencies (`ffmpeg` & `yt-dlp`)
 Check if installed:
 ```bash
@@ -90,6 +109,50 @@ Default workspace is `~/.nouclip/`:
 - `~/.nouclip/transcripts/` — Whisper JSONs (`*.whisper.json`) and ASS scripts (`*.ass`).
 - `~/.nouclip/segments/` — Cut raw segments, trimmed videos, and reframed MP4s.
 - `~/.nouclip/output/` — Final rendered videos with burned subtitles & mixed BGM.
+
+---
+
+## 💬 YouTube Captions First (`--captions`)
+
+For a YouTube link, `auto`, `transcript` and `highlight` read the video's own captions **before** sending any audio to Whisper. Captions cost nothing, need no STT endpoint, and cover the whole video without downloading it.
+
+Which track is used, in order:
+1. **Uploaded captions** in `--lang` — written by a person; timed per line, so word timing is estimated.
+2. **YouTube's speech recognition** in `--lang` (the `<lang>-orig` track) — timed per word.
+3. Otherwise **Whisper**. An automatic *translation* is never used — it is not what was said.
+
+The log says which it took: `Using YouTube captions (uploaded | YouTube speech recognition, track …, per-word timing | timing estimated per line)`. An uploaded track in a language other than the spoken one is a translation — fine to read, but the words will not match the speech word for word.
+
+- `--captions auto` *(default)*: captions when usable, Whisper otherwise.
+- `--captions only`: captions or fail — use when no Whisper endpoint is configured.
+- `--captions off`: always Whisper — use when the captions are known to be poor.
+
+**Always pass `--lang` as the language actually spoken** (`en` for an English video). It defaults to `id`, and asking for `id` captions on an English video finds none (or a translation).
+
+---
+
+## 📝 Summarizing a Video or YouTube Link
+
+nouclip does not summarize — **you do**, from its timed transcript. No LLM key is needed for this.
+
+```bash
+# A YouTube link: its captions when it has them — nothing is downloaded
+nouclip transcript "https://youtu.be/EXAMPLE_ID" --lang en -f txt -o /tmp/talk.txt
+
+# Only part of it (times then start at zero)
+nouclip transcript "https://youtu.be/EXAMPLE_ID" --lang en --range 10:00-25:00 -o /tmp/part.txt
+
+# A local file: transcribed with Whisper
+nouclip transcript ./meeting.mp4 --lang id -o /tmp/meeting.txt
+```
+
+The TXT is paragraphs like `[04:33 -> 04:52] …`. Then:
+- **Read it in parts on a long video** — a two-hour podcast is ~150k characters. Search it for what the person asked about rather than reading it top to bottom when they want one topic.
+- **Put timestamps on everything**: chapters as `[mm:ss] title`, so the person can jump there — and so a follow-up "clip that part" has its range ready for `nouclip auto --range`.
+- **Say where the words came from** — uploaded captions, YouTube's recognition, or Whisper — and that names and numbers in a machine transcript can be misheard; quote them as written.
+- **Only what was said.** A transcript has no picture: do not describe what is on screen, and say so if the question is about visuals.
+- **Write the summary in the person's language**, whatever the video's is.
+- For "the best moments" rather than a summary, `nouclip highlight <link> --lang en` scores them from the same words.
 
 ---
 
@@ -229,7 +292,8 @@ nouclip auto <videoOrUrl> [options]
   --center                  Shortcut for --mode center (crop fill)
   --no-subtitles            Do not generate or burn subtitles (clean reframed video only)
   --no-subs, --no-subtitle  Aliases for --no-subtitles
-  -l, --lang <lang>         Whisper language (default: "id")
+  -l, --lang <lang>         Spoken language, for captions and Whisper (default: "id")
+  --captions <mode>         YouTube captions: "auto" (before Whisper), "only", "off" (default: "auto")
   --style <preset>          Typography style: "default", "hormozi", "storyteller", "cinematic"
   --font-size <size>        Font size override (default: the --style preset size)
   --primary-color <hex>     Inactive text color override e.g. "&H00FFFFFF&"
@@ -293,11 +357,16 @@ nouclip extract <video> [options]
   -o, --output <path>       Output JSON (default: <workspace>/transcripts/<name><range>.whisper.json)
 ```
 
-### 8. `transcript` — Format Converter
+### 8. `transcript` — Timed Transcript of a File, JSON, or YouTube Link
 ```bash
-nouclip transcript <videoOrJson> [options]
+nouclip transcript <videoOrJsonOrUrl> [options]
   -f, --format <format>     Export format: "txt", "srt", "vtt", "json" (default: "txt")
-  -l, --lang <lang>         Transcription language (default: "id")
+  -l, --lang <lang>         Spoken language, for captions and Whisper (default: "id")
+  --captions <mode>         YouTube captions: "auto" (before Whisper), "only", "off" (default: "auto")
+  -r, --range <range>       Only this range, e.g. "10:00-25:00" (times then start at zero)
+  -s, --start, --from <t>   Start timestamp
+  -e, --end, --to <t>       End timestamp
+  -d, --duration <time>     Duration
   -o, --output <path>       Output file (default: <workspace>/transcripts/<name>_transcript.<format>)
 ```
 
@@ -319,7 +388,9 @@ nouclip subtitle <video> [options]
 
 ### 10. `highlight` — AI Moments Discovery (Optional LLM Heuristics)
 ```bash
-nouclip highlight <videoOrJson> [options]
+nouclip highlight <videoOrJsonOrUrl> [options]
+  -l, --lang <lang>         Spoken language, for captions and Whisper (default: "id")
+  --captions <mode>         YouTube captions: "auto" (before Whisper), "only", "off" (default: "auto")
   -k, --keyword <keyword>   Focus highlight search on a specific topic / keyword
   -m, --max-clips <count>   Maximum number of highlight clips to generate (default: 5)
   --min-duration <sec>      Minimum clip duration in seconds (default: 25)
@@ -327,7 +398,7 @@ nouclip highlight <videoOrJson> [options]
   --budget <seconds>        Total duration cap across all returned clips (default: 180)
   -o, --output <path>       Output JSON (default: <transcript>.highlights.json)
 ```
-Requires a Whisper JSON produced by `nouclip extract` first. Without an LLM API key it falls back to local heuristic density clustering, so it still works fully offline; `--keyword` always uses keyword matching instead of the LLM.
+Takes a Whisper JSON from `nouclip extract`, or a YouTube link directly — its captions are read and saved as that JSON first. Without an LLM API key it falls back to local heuristic density clustering, so it still works fully offline; `--keyword` always uses keyword matching instead of the LLM.
 
 ---
 

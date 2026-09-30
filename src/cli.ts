@@ -81,7 +81,12 @@ program
   .option('--no-subtitles', 'Do not generate or burn subtitles (clean reframed video only)')
   .option('--no-subs', 'Alias for --no-subtitles')
   .option('--no-subtitle', 'Alias for --no-subtitles')
-  .option('-l, --lang <lang>', "Language for Whisper transcription (default: 'id')", 'id')
+  .option('-l, --lang <lang>', "Spoken language, for captions and Whisper (default: 'id')", 'id')
+  .option(
+    '--captions <mode>',
+    "YouTube captions: 'auto' uses them before Whisper, 'only' never transcribes, 'off' always transcribes (default: 'auto')",
+    'auto'
+  )
   .option(
     '--style <preset>',
     'Subtitle typography style preset: "default", "hormozi", "storyteller", "cinematic" (default: "default")',
@@ -172,8 +177,21 @@ program
   .action(action(extractCommand));
 
 program
-  .command('transcript <videoOrJson>')
-  .description('Export clean formatted transcript to TXT, SRT, VTT, or JSON')
+  .command('transcript <videoOrJsonOrUrl>')
+  .description(
+    'Export a timed transcript (TXT, SRT, VTT, JSON) of a file or a YouTube link — from its captions when it has them'
+  )
+  .option('-r, --range <range>', 'Only this range e.g. "13:25-14:50" (times then start at zero)')
+  .option('-s, --start <time>', 'Start timestamp')
+  .option('--from <time>', 'Alias for --start')
+  .option('-e, --end <time>', 'End timestamp')
+  .option('--to <time>', 'Alias for --end')
+  .option('-d, --duration <time>', 'Duration')
+  .option(
+    '--captions <mode>',
+    "YouTube captions: 'auto' uses them before Whisper, 'only' never transcribes, 'off' always transcribes (default: 'auto')",
+    'auto'
+  )
   .option(
     '-f, --format <format>',
     "Export format: 'txt', 'srt', 'vtt', 'json' (default: 'txt')",
@@ -203,9 +221,15 @@ program
   .action(action(subtitleCommand));
 
 program
-  .command('highlight <videoOrJson>')
+  .command('highlight <videoOrJsonOrUrl>')
   .description(
-    'Optional: Analyze transcript to suggest clip timestamps using any OpenAI-compatible LLM'
+    'Suggest clip timestamps from a transcript, a video, or a YouTube link (its captions when it has them)'
+  )
+  .option('-l, --lang <lang>', "Spoken language, for captions and Whisper (default: 'id')", 'id')
+  .option(
+    '--captions <mode>',
+    "YouTube captions: 'auto' uses them before Whisper, 'only' never transcribes, 'off' always transcribes (default: 'auto')",
+    'auto'
   )
   .option('-k, --keyword <keyword>', 'Focus highlight search on specific keyword / topic')
   .option(

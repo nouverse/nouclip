@@ -4,6 +4,7 @@ import { removeQuietly } from '@/commands/extract';
 import type { WordTimestamp } from '@/core/ass';
 import { config } from '@/core/config';
 import { FFmpegRunner } from '@/core/ffmpeg';
+import { type TimeSelectionOptions, resolveTimeSelection, selectionSuffix } from '@/core/selection';
 import {
   TRANSCRIPT_FORMATS,
   type TranscriptData,
@@ -11,14 +12,18 @@ import {
   renderTranscript
 } from '@/core/transcript';
 import { WhisperClient } from '@/core/whisper';
+import { obtainWords, parseCaptionsMode } from '@/core/words';
+import { YouTubeDownloader } from '@/core/youtube';
 import { CliError, getErrorMessage } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import { resolveMediaInput } from '@/utils/path';
 
-export interface TranscriptCommandOptions {
+export interface TranscriptCommandOptions extends TimeSelectionOptions {
   format?: string;
   lang?: string;
   output?: string;
+  /** `auto` (default), `only` or `off` — see `CaptionsMode`. */
+  captions?: string;
 }
 
 export async function transcriptCommand(
@@ -27,11 +32,6 @@ export async function transcriptCommand(
 ) {
   config.ensureDirs();
 
-  const input = resolveMediaInput(videoOrJsonPath);
-  if (!existsSync(input)) {
-    throw new CliError(`File not found: ${videoOrJsonPath} (Checked: ${input})`);
-  }
-
   const format = (options.format || 'txt').toLowerCase();
   if (!isTranscriptFormat(format)) {
     throw new CliError(
@@ -39,19 +39,62 @@ export async function transcriptCommand(
     );
   }
 
-  const baseName = basename(input, extname(input));
-  const data = await loadTranscript(input, baseName, options.lang || 'id');
+  const { data, baseName, source } = await load(videoOrJsonPath, options);
 
   if (data.words.length === 0) {
-    throw new CliError(`No words found in transcript: ${input}`);
+    throw new CliError(`No words found in transcript: ${source}`);
   }
 
   const outPath = options.output
     ? resolve(options.output)
     : join(config.transcriptDir, `${baseName}_transcript.${format}`);
 
-  writeFileSync(outPath, renderTranscript(data, format, input), 'utf-8');
+  writeFileSync(outPath, renderTranscript(data, format, source), 'utf-8');
   logger.success(`Transcript exported (${format.toUpperCase()}): ${outPath}`);
+}
+
+/**
+ * A transcript JSON is read as it is. A video — a file or a YouTube link — goes through
+ * `obtainWords`: a YouTube link's own captions first, so it is often not downloaded at all.
+ */
+async function load(
+  videoOrJson: string,
+  options: TranscriptCommandOptions
+): Promise<{ data: TranscriptData; baseName: string; source: string }> {
+  const lang = options.lang || 'id';
+  const selection = resolveTimeSelection(options);
+
+  if (YouTubeDownloader.isYouTubeUrl(videoOrJson)) {
+    const got = await obtainWords(videoOrJson, {
+      lang,
+      captions: parseCaptionsMode(options.captions),
+      selection
+    });
+    return {
+      data: { words: got.words, text: got.text, duration: got.duration },
+      baseName: `${got.name}${selectionSuffix(selection)}`,
+      source: videoOrJson
+    };
+  }
+
+  const input = resolveMediaInput(videoOrJson);
+  if (!existsSync(input)) {
+    throw new CliError(`File not found: ${videoOrJson} (Checked: ${input})`);
+  }
+  const baseName = basename(input, extname(input));
+  if (!input.endsWith('.json') && (selection.hasSelection || options.captions === 'only')) {
+    const got = await obtainWords(input, {
+      lang,
+      captions: parseCaptionsMode(options.captions),
+      selection
+    });
+    return {
+      data: { words: got.words, text: got.text, duration: got.duration },
+      baseName: `${baseName}${selectionSuffix(selection)}`,
+      source: input
+    };
+  }
+  return { data: await loadTranscript(input, baseName, lang), baseName, source: input };
 }
 
 async function loadTranscript(
