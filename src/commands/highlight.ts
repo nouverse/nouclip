@@ -1,14 +1,20 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { WordTimestamp } from '@/core/ass';
 import { config } from '@/core/config';
 import { findHeuristicMoments, findKeywordMoments } from '@/core/highlights';
 import { type ClipHighlight, LLMClient } from '@/core/llm';
+import { obtainWords, parseCaptionsMode } from '@/core/words';
+import { YouTubeDownloader } from '@/core/youtube';
 import { CliError, getErrorMessage } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import { resolveMediaInput } from '@/utils/path';
 import pc from 'picocolors';
 
 export interface HighlightCommandOptions {
+  lang?: string;
+  /** `auto` (default), `only` or `off` — see `CaptionsMode`. */
+  captions?: string;
   maxClips?: string;
   keyword?: string;
   model?: string;
@@ -56,6 +62,40 @@ export function parseNumericOption(
   return parsed;
 }
 
+function requireFile(path: string): string {
+  const input = resolveMediaInput(path);
+  if (!existsSync(input)) throw new CliError(`File not found: ${path} (Checked: ${input})`);
+  return input;
+}
+
+/**
+ * A YouTube link's words, saved as a transcript JSON beside the others — from its captions when it
+ * has them, which for a long video is the difference between reading a file and transcribing hours.
+ */
+async function wordsFromYouTube(url: string, options: HighlightCommandOptions): Promise<string> {
+  const got = await obtainWords(url, {
+    lang: options.lang || 'id',
+    captions: parseCaptionsMode(options.captions)
+  });
+  const jsonPath = join(config.transcriptDir, `${got.name}.whisper.json`);
+  writeFileSync(
+    jsonPath,
+    JSON.stringify(
+      {
+        duration: got.duration,
+        text: got.text,
+        words: got.words,
+        source: got.via === 'captions' ? 'youtube-captions' : 'whisper'
+      },
+      null,
+      2
+    ),
+    'utf-8'
+  );
+  logger.info(`Saved the words to ${jsonPath}`);
+  return jsonPath;
+}
+
 /** Resolves the transcript JSON companion for a video path. */
 export function resolveTranscriptJson(input: string): string {
   if (input.endsWith('.json')) return input;
@@ -68,12 +108,9 @@ export async function highlightCommand(
 ) {
   config.ensureDirs();
 
-  const input = resolveMediaInput(jsonOrVideoPath);
-  if (!existsSync(input)) {
-    throw new CliError(`File not found: ${jsonOrVideoPath} (Checked: ${input})`);
-  }
-
-  const jsonPath = resolveTranscriptJson(input);
+  const jsonPath = YouTubeDownloader.isYouTubeUrl(jsonOrVideoPath)
+    ? await wordsFromYouTube(jsonOrVideoPath, options)
+    : resolveTranscriptJson(requireFile(jsonOrVideoPath));
   if (!existsSync(jsonPath)) {
     throw new CliError(`Run 'nouclip extract' first to generate ${jsonPath}`);
   }

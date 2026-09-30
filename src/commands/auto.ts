@@ -3,12 +3,13 @@ import { basename, extname, join, resolve } from 'node:path';
 import { removeQuietly } from '@/commands/extract';
 import { resolveFramingMode } from '@/commands/framing';
 import { parseFontSize } from '@/commands/subtitle';
-import { ASSGenerator } from '@/core/ass';
+import { ASSGenerator, type WordTimestamp } from '@/core/ass';
 import { config } from '@/core/config';
 import { FFmpegRunner } from '@/core/ffmpeg';
 import { type TimeSelectionOptions, resolveTimeSelection, selectionSuffix } from '@/core/selection';
 import { findSpeechIntervals, shiftWordTimestamps } from '@/core/transcript';
 import { WhisperClient } from '@/core/whisper';
+import { captionWords, parseCaptionsMode } from '@/core/words';
 import { YouTubeDownloader } from '@/core/youtube';
 import { CliError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
@@ -44,6 +45,8 @@ export interface AutoCommandOptions extends TimeSelectionOptions {
   downloadDir?: string;
   outputDir?: string;
   keepTemp?: boolean;
+  /** `auto` (default), `only` or `off` — see `CaptionsMode`. */
+  captions?: string;
 }
 
 /** True when any of the `--no-subtitles` aliases was passed. */
@@ -139,29 +142,59 @@ export async function autoCommand(videoOrUrl: string, options: AutoCommandOption
     return;
   }
 
-  // 5. Audio extraction & Whisper transcription.
+  // 5. Word timestamps: the video's own YouTube captions when it has them, Whisper otherwise.
   logger.step(
     currentStep++,
     totalSteps,
-    'Extracting audio & generating word timestamps with Whisper...'
+    'Getting word timestamps (captions first, then Whisper)...'
   );
-  const tempWav = join(config.segmentDir, `${baseName}_audio.temp.wav`);
   const transcriptJsonPath = join(config.transcriptDir, `${transcriptBase}.whisper.json`);
   const assPath = join(config.transcriptDir, `${transcriptBase}.ass`);
+  const lang = options.lang || 'id';
 
-  await FFmpegRunner.extractAudio(framedOut, tempWav);
-
-  let whisperRes: Awaited<ReturnType<typeof WhisperClient.transcribe>>;
-  try {
-    whisperRes = await WhisperClient.transcribe(tempWav, {
-      language: options.lang || 'id',
-      outputJson: transcriptJsonPath
-    });
-  } finally {
-    if (!options.keepTemp) removeQuietly(tempWav);
+  const captioned = await captionWords(
+    videoOrUrl,
+    lang,
+    parseCaptionsMode(options.captions),
+    selection
+  );
+  let whisperRes: { words: WordTimestamp[]; text: string };
+  if (captioned) {
+    // Written in the Whisper JSON shape, so `subtitle`, `highlight` and a draft review read it the same.
+    writeFileSync(
+      transcriptJsonPath,
+      JSON.stringify(
+        {
+          language: lang,
+          duration: captioned.duration,
+          text: captioned.text,
+          words: captioned.words,
+          source: 'youtube-captions',
+          track: captioned.caption?.track,
+          timing: captioned.caption?.timing
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    );
+    whisperRes = captioned;
+  } else {
+    const tempWav = join(config.segmentDir, `${baseName}_audio.temp.wav`);
+    await FFmpegRunner.extractAudio(framedOut, tempWav);
+    try {
+      whisperRes = await WhisperClient.transcribe(tempWav, {
+        language: lang,
+        outputJson: transcriptJsonPath
+      });
+    } finally {
+      if (!options.keepTemp) removeQuietly(tempWav);
+    }
   }
 
-  logger.success(`Transcription ready: ${whisperRes.words.length} words -> ${transcriptJsonPath}`);
+  logger.success(
+    `Word timestamps ready: ${whisperRes.words.length} words -> ${transcriptJsonPath}`
+  );
 
   let activeVideo = framedOut;
   let activeWords = whisperRes.words;

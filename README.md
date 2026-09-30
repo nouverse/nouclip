@@ -32,6 +32,8 @@ Designed for automated workflows, AI agent harnesses, and power users who need d
 - ✂️ **Silence & Pause Trimming (`--silence-trim`):** Reads Whisper word timestamps to automatically cut silent pauses (`>0.6s`), concatenating speech seamlessly and auto-shifting subtitle timestamps.
 - 🎵 **Smart BGM & Sidechain Ducking (`--bgm`):** Auto-loops background music and dynamically ducks/lowers BGM volume when speech is active (`sidechaincompress` + `amix`).
 - ✍️ **Draft & Staged Workflow (`--draft` / `--no-burn`):** Cuts and prepares transcript/ASS files for human or agent review before burning subtitles into the final video.
+- 💬 **YouTube Captions First (`--captions`):** For a YouTube link, `auto`, `transcript` and `highlight` read the video's own captions (uploaded, or YouTube's per-word speech recognition) before sending any audio to Whisper — no STT endpoint needed, nothing downloaded for a transcript. Automatic translations are never used. `--captions only` never transcribes; `--captions off` always does.
+- 📝 **Timed Transcripts for Summaries:** `nouclip transcript <youtube-link> --lang en` writes `[mm:ss -> mm:ss]` paragraphs an AI agent can summarize with chapters and timestamps.
 - 🎙️ **GPU STT Integration:** Directly integrates with local GPU endpoints like **[Voice Compute](https://github.com/nouverse/voice-compute)** or any OpenAI-compatible Whisper API.
 
 ---
@@ -115,6 +117,10 @@ bun run src/cli.ts --help
 bun run build
 ./dist/nouclip --help
 ```
+
+### Updating
+
+Update the way you installed: `bun add -g nouclip@latest`, `npm install -g nouclip@latest`, `pnpm add -g nouclip@latest`, or re-run the install script (it always fetches the latest release). `nouclip --version` confirms.
 
 ---
 
