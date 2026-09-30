@@ -7,6 +7,9 @@ on:
 
 permissions:
   contents: write
+  # Trusted publishing: npm takes this job's OIDC identity instead of a token, so there is no
+  # NPM_TOKEN to expire and no 2FA code a runner cannot type.
+  id-token: write
 
 jobs:
   build-and-release:
@@ -25,7 +28,8 @@ jobs:
       - name: Setup Node.js Runtime
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 24 ships npm 11; trusted publishing needs npm 11.5.1 or later.
+          node-version: 24
           registry-url: "https://registry.npmjs.org"
 
       - name: Install Dependencies
@@ -59,12 +63,14 @@ jobs:
           chmod 755 deb-pkg/usr/local/bin/nouclip
           dpkg-deb --build --root-owner-group deb-pkg dist/nouclip_amd64.deb
 
+      # No `|| true`: a publish that fails has to fail the run, or a release looks shipped while npm
+      # still serves the previous version.
       - name: Publish to NPM
-        run: npm publish --access public || true
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
 
+      # Only from a release: a manual run has no release to attach to, and is for publishing to npm.
       - name: Attach Assets to GitHub Release
+        if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: |
