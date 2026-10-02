@@ -38,15 +38,24 @@ export class YouTubeDownloader {
   }
 
   /** Checks whether this video id was already downloaded into `outputDir`. */
-  static findExistingDownload(url: string, outputDir: string): string | null {
+  static findExistingDownload(
+    url: string,
+    outputDir: string,
+    section?: DownloadSection
+  ): string | null {
     if (!existsSync(outputDir)) return null;
 
     const videoId = YouTubeDownloader.extractVideoId(url);
     if (!videoId) return null;
 
+    const targetPattern = section
+      ? `[${videoId}]_${Math.round(section.start)}s-${Math.round(section.end)}s`
+      : `[${videoId}]`;
+
     try {
       for (const file of readdirSync(outputDir)) {
-        if (!file.includes(`[${videoId}]`) || !file.endsWith('.mp4')) continue;
+        if (!file.includes(targetPattern) || !file.endsWith('.mp4')) continue;
+        if (!section && file.includes(`[${videoId}]_`)) continue;
         const fullPath = join(outputDir, file);
         if (existsSync(fullPath) && statSync(fullPath).size > MIN_CACHED_BYTES) {
           return fullPath;
@@ -79,6 +88,7 @@ export class YouTubeDownloader {
 
     if (options.section) {
       args.push('--download-sections', `*${options.section.start}-${options.section.end}`);
+      args.push('--force-keyframes-at-cuts');
     }
 
     return args;
@@ -111,18 +121,22 @@ export class YouTubeDownloader {
     const outDir = options.outputDir || config.downloadDir;
     mkdirSync(outDir, { recursive: true });
 
-    // Cache only applies to a plain, full-video download.
-    if (!options.force && !options.section && !options.outputFileName) {
-      const existing = YouTubeDownloader.findExistingDownload(url, outDir);
+    // Cache applies when not forced and no explicit custom filename.
+    if (!options.force && !options.outputFileName) {
+      const existing = YouTubeDownloader.findExistingDownload(url, outDir, options.section);
       if (existing) {
         logger.success(`Reusing cached download: ${existing}`);
         return existing;
       }
     }
 
+    const sectionSuffix = options.section
+      ? `_${Math.round(options.section.start)}s-${Math.round(options.section.end)}s`
+      : '';
+
     const outTemplate = options.outputFileName
       ? join(outDir, options.outputFileName)
-      : join(outDir, '%(title).60s [%(id)s].%(ext)s');
+      : join(outDir, `%(title).60s [%(id)s]${sectionSuffix}.%(ext)s`);
 
     const ytdlp = YouTubeDownloader.getYtDlpPath();
     const args = YouTubeDownloader.buildDownloadArgs(url, {

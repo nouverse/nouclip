@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { YouTubeDownloader } from '@/core/youtube';
 
 describe('YouTubeDownloader.isYouTubeUrl', () => {
@@ -81,6 +84,7 @@ describe('YouTubeDownloader.buildDownloadArgs', () => {
       section: { start: 30, end: 75 }
     });
     expect(args[args.indexOf('--download-sections') + 1]).toBe('*30-75');
+    expect(args).toContain('--force-keyframes-at-cuts');
   });
 });
 
@@ -98,5 +102,46 @@ describe('YouTubeDownloader.parsePrintedPath', () => {
 
   it('returns null for empty output', () => {
     expect(YouTubeDownloader.parsePrintedPath('   \n\n', exists)).toBeNull();
+  });
+});
+
+describe('YouTubeDownloader.findExistingDownload', () => {
+  let tmpDir: string;
+  const videoId = 'dQw4w9WgXcQ';
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+
+  beforeAll(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'nouclip-ytdl-test-'));
+    const dummyPayload = Buffer.alloc(2048, 'a');
+    writeFileSync(join(tmpDir, `Rick Astley [${videoId}].mp4`), dummyPayload);
+    writeFileSync(join(tmpDir, `Rick Astley [${videoId}]_30s-75s.mp4`), dummyPayload);
+    writeFileSync(join(tmpDir, 'Tiny [SmallOnlyXX].mp4'), Buffer.alloc(100, 'x'));
+  });
+
+  afterAll(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('matches full download when no section is requested', () => {
+    const hit = YouTubeDownloader.findExistingDownload(url, tmpDir);
+    expect(hit).toBe(join(tmpDir, `Rick Astley [${videoId}].mp4`));
+  });
+
+  it('matches section download with exact start and end seconds', () => {
+    const hit = YouTubeDownloader.findExistingDownload(url, tmpDir, { start: 30, end: 75 });
+    expect(hit).toBe(join(tmpDir, `Rick Astley [${videoId}]_30s-75s.mp4`));
+  });
+
+  it('returns null when requested section is not cached', () => {
+    const hit = YouTubeDownloader.findExistingDownload(url, tmpDir, { start: 0, end: 20 });
+    expect(hit).toBeNull();
+  });
+
+  it('returns null when cached file is below MIN_CACHED_BYTES', () => {
+    const hit = YouTubeDownloader.findExistingDownload(
+      'https://www.youtube.com/watch?v=SmallOnlyXX',
+      tmpDir
+    );
+    expect(hit).toBeNull();
   });
 });
