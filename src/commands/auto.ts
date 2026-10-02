@@ -6,7 +6,12 @@ import { parseFontSize } from '@/commands/subtitle';
 import { ASSGenerator, type WordTimestamp } from '@/core/ass';
 import { config } from '@/core/config';
 import { FFmpegRunner } from '@/core/ffmpeg';
-import { type TimeSelectionOptions, resolveTimeSelection, selectionSuffix } from '@/core/selection';
+import {
+  type TimeSelection,
+  type TimeSelectionOptions,
+  resolveTimeSelection,
+  selectionSuffix
+} from '@/core/selection';
 import { findSpeechIntervals, shiftWordTimestamps } from '@/core/transcript';
 import { WhisperClient } from '@/core/whisper';
 import { captionWords, parseCaptionsMode } from '@/core/words';
@@ -59,25 +64,32 @@ export function isDraftRun(options: AutoCommandOptions): boolean {
   return options.draft === true || options.burn === false;
 }
 
+export interface ResolvedMedia {
+  path: string;
+  isPreClipped: boolean;
+}
+
 export async function autoCommand(videoOrUrl: string, options: AutoCommandOptions = {}) {
   config.ensureDirs();
 
   logger.banner();
 
-  // 1. Download if URL, otherwise resolve the local input.
-  const input = await resolveSource(videoOrUrl, options);
-  const baseName = basename(input, extname(input));
-
+  // 1. Resolve selection and subtitles preference FIRST.
   const selection = resolveTimeSelection(options);
   const skipSubtitles = shouldSkipSubtitles(options);
 
-  const totalSteps =
-    (selection.hasSelection ? 1 : 0) + (skipSubtitles ? 1 : 3) + (options.bgm ? 1 : 0);
+  // 2. Download if URL (section-aware), otherwise resolve the local input.
+  const resolved = await resolveSource(videoOrUrl, options, selection);
+  const input = resolved.path;
+  const baseName = basename(input, extname(input));
+
+  const needsCutting = selection.hasSelection && !resolved.isPreClipped;
+  const totalSteps = (needsCutting ? 1 : 0) + (skipSubtitles ? 1 : 3) + (options.bgm ? 1 : 0);
   let currentStep = 1;
 
-  // 2. Cut the requested segment.
+  // 3. Cut the requested segment (skipped if already downloaded as a section).
   let workingVideo = input;
-  if (selection.hasSelection) {
+  if (needsCutting) {
     const { start, duration } = selection;
     logger.step(
       currentStep++,
@@ -90,7 +102,7 @@ export async function autoCommand(videoOrUrl: string, options: AutoCommandOption
     logger.success(`Clipped to: ${cutOut}`);
   }
 
-  // 3. Reframe to the target aspect ratio.
+  // 4. Reframe to the target aspect ratio.
   const aspectStr = options.aspect || '9:16';
   const framingMode = resolveFramingMode(options);
   const aspectPreset = FFmpegRunner.parseAspectRatio(aspectStr);
@@ -106,7 +118,9 @@ export async function autoCommand(videoOrUrl: string, options: AutoCommandOption
   await FFmpegRunner.reframe(workingVideo, framedOut, { aspect: aspectStr, mode: framingMode });
   logger.success(`Framed video ready: ${framedOut}`);
 
-  const transcriptBase = `${baseName}${selectionSuffix(selection)}`;
+  const transcriptBase = resolved.isPreClipped
+    ? baseName
+    : `${baseName}${selectionSuffix(selection)}`;
   const finalDir = options.outputDir ? resolve(options.outputDir) : config.outputDir;
 
   // 4. Clean-video shortcut.
@@ -272,19 +286,39 @@ export async function autoCommand(videoOrUrl: string, options: AutoCommandOption
   console.log(`👉 ${finalOutput}`);
 }
 
-async function resolveSource(videoOrUrl: string, options: AutoCommandOptions): Promise<string> {
+export async function resolveSource(
+  videoOrUrl: string,
+  options: AutoCommandOptions,
+  selection: TimeSelection
+): Promise<ResolvedMedia> {
   if (YouTubeDownloader.isYouTubeUrl(videoOrUrl)) {
     logger.info(`Detected YouTube URL: ${videoOrUrl}`);
-    return YouTubeDownloader.download(videoOrUrl, {
-      outputDir: options.downloadDir ? resolve(options.downloadDir) : config.downloadDir
+    const outDir = options.downloadDir ? resolve(options.downloadDir) : config.downloadDir;
+
+    if (selection.hasSelection) {
+      const start = selection.start;
+      const end = selection.start + selection.duration;
+      logger.info(
+        `Downloading section only: ${formatSecondsToTimestamp(start)} -> ${formatSecondsToTimestamp(end)} (${Math.round(selection.duration)}s)...`
+      );
+      const downloadedPath = await YouTubeDownloader.download(videoOrUrl, {
+        outputDir: outDir,
+        section: { start, end }
+      });
+      return { path: downloadedPath, isPreClipped: true };
+    }
+
+    const downloadedPath = await YouTubeDownloader.download(videoOrUrl, {
+      outputDir: outDir
     });
+    return { path: downloadedPath, isPreClipped: false };
   }
 
   const input = resolveMediaInput(videoOrUrl);
   if (!existsSync(input)) {
     throw new CliError(`File not found: ${videoOrUrl} (Checked: ${input})`);
   }
-  return input;
+  return { path: input, isPreClipped: false };
 }
 
 function printDraftSummary(
