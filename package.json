@@ -1,6 +1,6 @@
 {
   "name": "nouclip",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "description": "High-performance AI video clipper & auto-shorts generator powered by Whisper, FFmpeg & Bun",
   "main": "dist/cli.js",
