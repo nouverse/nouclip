@@ -62,6 +62,8 @@ describe('YouTubeDownloader.buildDownloadArgs', () => {
     const args = YouTubeDownloader.buildDownloadArgs('URL', { outTemplate: '/out/%(id)s.%(ext)s' });
 
     expect(args[0]).toBe('URL');
+    expect(args).toContain('--js-runtimes');
+    expect(args[args.indexOf('--js-runtimes') + 1]).toBe('node:node');
     expect(args).toContain('--merge-output-format');
     expect(args).toContain('--no-playlist');
     expect(args[args.indexOf('-o') + 1]).toBe('/out/%(id)s.%(ext)s');

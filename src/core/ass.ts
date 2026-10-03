@@ -126,16 +126,47 @@ export const ASS_DEFAULTS = {
   minWordDuration: 0.3
 } as const;
 
+const PUNCTUATION_ONLY = /^[.,?!;:—–…"'()[\]{}]+$/;
+
 export class ASSGenerator {
-  /** Drops empty words and anything with unusable timings. */
+  /**
+   * Drops empty words and unusable timings, and attaches standalone punctuation tokens
+   * (e.g. from YouTube captions or speech recognition) to their preceding word
+   * so punctuation never floats as an individual kinetic word on screen.
+   */
   static sanitizeWords(words: WordTimestamp[]): WordTimestamp[] {
-    return words.filter(
+    const valid = words.filter(
       (w) =>
         typeof w?.word === 'string' &&
         w.word.trim().length > 0 &&
         Number.isFinite(w.start) &&
         Number.isFinite(w.end)
     );
+
+    const merged: WordTimestamp[] = [];
+    for (const item of valid) {
+      const text = item.word.trim();
+      if (PUNCTUATION_ONLY.test(text)) {
+        if (merged.length > 0) {
+          const prev = merged[merged.length - 1];
+          prev.word = `${prev.word}${text}`;
+          prev.end = Math.max(prev.end, item.end);
+        }
+        // Discard floating punctuation if there is no preceding word
+        continue;
+      }
+
+      // If a word has leading floating punctuation like ",Saya", strip the leading symbol
+      const cleaned = text.replace(/^[.,?!;:—–…]+/, '');
+      if (!cleaned) continue;
+
+      merged.push({
+        ...item,
+        word: text.startsWith(',') || text.startsWith('.') ? cleaned : text
+      });
+    }
+
+    return merged;
   }
 
   /**

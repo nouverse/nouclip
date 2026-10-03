@@ -30,6 +30,26 @@ describe('ASSGenerator.sanitizeWords', () => {
     ]);
     expect(cleaned.map((w) => w.word)).toEqual(['ok']);
   });
+
+  it('attaches standalone punctuation to the previous word and extends its timing', () => {
+    const cleaned = ASSGenerator.sanitizeWords([
+      { word: 'bahwa', start: 0, end: 0.5 },
+      { word: ',', start: 0.5, end: 0.8 },
+      { word: 'jika', start: 0.9, end: 1.2 }
+    ]);
+    expect(cleaned).toEqual([
+      { word: 'bahwa,', start: 0, end: 0.8 },
+      { word: 'jika', start: 0.9, end: 1.2 }
+    ]);
+  });
+
+  it('discards leading standalone punctuation when there is no preceding word', () => {
+    const cleaned = ASSGenerator.sanitizeWords([
+      { word: ',', start: 0, end: 0.2 },
+      { word: 'Saya', start: 0.3, end: 0.7 }
+    ]);
+    expect(cleaned.map((w) => w.word)).toEqual(['Saya']);
+  });
 });
 
 describe('ASSGenerator.groupWords', () => {
