@@ -116,6 +116,10 @@ program
   .option('--download-dir <dir>', 'Custom directory to store downloaded videos')
   .option('--output-dir <dir>', 'Custom directory to store final videos')
   .option('--keep-temp', 'Keep intermediate wav/temp files')
+  .option(
+    '--js-runtimes <runtime>',
+    'Additional JavaScript runtime for yt-dlp e.g. "node:node" or "deno"'
+  )
   .action(action(autoCommand));
 
 // 3. Modular Operations
@@ -127,6 +131,10 @@ program
   .option('-o, --output <filename>', 'Output filename template')
   .option('--dir <directory>', 'Output download directory')
   .option('--force', 'Force re-download even if already cached')
+  .option(
+    '--js-runtimes <runtime>',
+    'Additional JavaScript runtime for yt-dlp e.g. "node:node" or "deno"'
+  )
   .action(action(downloadCommand));
 
 program

@@ -50,6 +50,7 @@ export interface AutoCommandOptions extends TimeSelectionOptions {
   downloadDir?: string;
   outputDir?: string;
   keepTemp?: boolean;
+  jsRuntimes?: string;
   /** `auto` (default), `only` or `off` — see `CaptionsMode`. */
   captions?: string;
 }
@@ -303,13 +304,15 @@ export async function resolveSource(
       );
       const downloadedPath = await YouTubeDownloader.download(videoOrUrl, {
         outputDir: outDir,
-        section: { start, end }
+        section: { start, end },
+        jsRuntimes: options.jsRuntimes
       });
       return { path: downloadedPath, isPreClipped: true };
     }
 
     const downloadedPath = await YouTubeDownloader.download(videoOrUrl, {
-      outputDir: outDir
+      outputDir: outDir,
+      jsRuntimes: options.jsRuntimes
     });
     return { path: downloadedPath, isPreClipped: false };
   }

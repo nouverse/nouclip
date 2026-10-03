@@ -62,14 +62,22 @@ describe('YouTubeDownloader.buildDownloadArgs', () => {
     const args = YouTubeDownloader.buildDownloadArgs('URL', { outTemplate: '/out/%(id)s.%(ext)s' });
 
     expect(args[0]).toBe('URL');
-    expect(args).toContain('--js-runtimes');
-    expect(args[args.indexOf('--js-runtimes') + 1]).toBe('node:node');
+    expect(args).not.toContain('--js-runtimes');
     expect(args).toContain('--merge-output-format');
     expect(args).toContain('--no-playlist');
     expect(args[args.indexOf('-o') + 1]).toBe('/out/%(id)s.%(ext)s');
     expect(args[args.indexOf('--print') + 1]).toBe('after_move:filepath');
     expect(args).not.toContain('--ffmpeg-location');
     expect(args).not.toContain('--download-sections');
+  });
+
+  it('passes js-runtimes when configured', () => {
+    const args = YouTubeDownloader.buildDownloadArgs('URL', {
+      outTemplate: 'o',
+      jsRuntimes: 'node:node'
+    });
+    expect(args).toContain('--js-runtimes');
+    expect(args[args.indexOf('--js-runtimes') + 1]).toBe('node:node');
   });
 
   it('passes the ffmpeg location when one is configured', () => {
