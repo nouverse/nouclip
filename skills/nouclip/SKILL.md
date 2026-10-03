@@ -168,13 +168,37 @@ NouClip accepts human, timestamp, and second ranges:
 
 ## 🎨 Typography Presets (`--style`)
 
-NouClip includes 4 built-in animated ASS kinetic typography presets:
+NouClip includes 5 built-in typography presets:
+- `--style standard`: Clean, static phrase/sentence-based typography (Arial, 50px, bold outline, balanced 2-line wraps) without per-word karaoke highlighting. **Essential for translated videos, international podcasts, or educational content** where rapid single-word karaoke jumping creates cognitive clash and breaks compound phrases.
 - `--style hormozi`: High-energy all-caps (Arial Black, 70px), electric neon green highlight (`&H0000FF00`), pop scaling 118%, thick 6px outline.
 - `--style storyteller`: Clean natural-case (Arial, 54px), soft cyan highlight (`&H0050E3C2`), refined 3px outline.
 - `--style cinematic`: Elegant all-caps wide-tracking (Trebuchet MS, 58px, spacing +4), golden amber highlight (`&H0000A5FF`).
 - `--style default`: Classic all-caps (Arial Black, 62px) with yellow highlight (`&H0000FFFF`).
 
 Each preset carries its own font size. `--font-size`, `--primary-color` and `--highlight-color` are overrides: pass them only to deviate from the preset, otherwise leave them out so the preset renders as designed.
+
+---
+
+## 🌐 Agent Translation & Localization Workflow (For AI Agents)
+
+When clipping foreign-language videos (e.g. English audio for an Indonesian audience):
+
+1. **Why not raw machine translation?**
+   YouTube auto-translate or raw machine translation is literal, awkward, preserves verbal filler ("Anda tahu", "fakta bahwa"), and chops compound phrases unnaturally (e.g. "pakar rantai" on line 1 and "pasokan" on line 2).
+
+2. **The Agent-as-Translator Pattern**:
+   nouclip does not need an external translation API or LLM key — **you (the AI Agent) are the LLM**.
+   - Step 1: Export timed transcript JSON for the clipped range:
+     ```bash
+     nouclip transcript "<videoOrUrl>" --lang en --format json --range 13:25-14:10 -o /tmp/raw_transcript.json
+     ```
+   - Step 2: Read `/tmp/raw_transcript.json` with the `read` tool.
+   - Step 3: Localize and translate the dialogue into natural, engaging spoken language (e.g. conversational Indonesian). Keep the sentence timestamps (`start`, `end`) intact and map the words or phrases.
+   - Step 4: Write the translated JSON or compile an ASS script:
+     ```bash
+     nouclip subtitle ./clipped.mp4 --sub /tmp/translated.json --style standard -o ./final.mp4
+     ```
+   The `standard` preset will automatically balance line lengths, split clauses at punctuation, and hold each phrase stationary for 2–3 seconds so viewers can easily read and comprehend.
 
 ---
 
