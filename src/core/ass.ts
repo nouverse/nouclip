@@ -12,7 +12,7 @@ export interface TranscriptSegment {
   words: WordTimestamp[];
 }
 
-export type SubtitleStylePreset = 'default' | 'hormozi' | 'storyteller' | 'cinematic';
+export type SubtitleStylePreset = 'default' | 'hormozi' | 'storyteller' | 'cinematic' | 'standard';
 
 export interface SubtitleStyleConfig {
   fontName: string;
@@ -95,6 +95,22 @@ export const SUBTITLE_STYLE_PRESETS: Record<SubtitleStylePreset, SubtitleStyleCo
     uppercase: true,
     scaleFactor: 110,
     marginV: 360
+  },
+  standard: {
+    fontName: 'Arial',
+    fontSize: 50,
+    primaryColor: '&H0000FFFF', // Cinema Yellow
+    highlightColor: '&H0000FFFF', // Uniform Yellow
+    outlineColor: '&H00000000', // Black stroke
+    backColor: '&H80000000',
+    bold: -1,
+    italic: 0,
+    outline: 4,
+    shadow: 2,
+    spacing: 1,
+    uppercase: false,
+    scaleFactor: 100,
+    marginV: 320
   }
 };
 
@@ -126,16 +142,47 @@ export const ASS_DEFAULTS = {
   minWordDuration: 0.3
 } as const;
 
+const PUNCTUATION_ONLY = /^[.,?!;:—–…"'()[\]{}]+$/;
+
 export class ASSGenerator {
-  /** Drops empty words and anything with unusable timings. */
+  /**
+   * Drops empty words and unusable timings, and attaches standalone punctuation tokens
+   * (e.g. from YouTube captions or speech recognition) to their preceding word
+   * so punctuation never floats as an individual kinetic word on screen.
+   */
   static sanitizeWords(words: WordTimestamp[]): WordTimestamp[] {
-    return words.filter(
+    const valid = words.filter(
       (w) =>
         typeof w?.word === 'string' &&
         w.word.trim().length > 0 &&
         Number.isFinite(w.start) &&
         Number.isFinite(w.end)
     );
+
+    const merged: WordTimestamp[] = [];
+    for (const item of valid) {
+      const text = item.word.trim();
+      if (PUNCTUATION_ONLY.test(text)) {
+        if (merged.length > 0) {
+          const prev = merged[merged.length - 1];
+          prev.word = `${prev.word}${text}`;
+          prev.end = Math.max(prev.end, item.end);
+        }
+        // Discard floating punctuation if there is no preceding word
+        continue;
+      }
+
+      // If a word has leading floating punctuation like ",Saya", strip the leading symbol
+      const cleaned = text.replace(/^[.,?!;:—–…]+/, '');
+      if (!cleaned) continue;
+
+      merged.push({
+        ...item,
+        word: text.startsWith(',') || text.startsWith('.') ? cleaned : text
+      });
+    }
+
+    return merged;
   }
 
   /**
@@ -184,17 +231,8 @@ export class ASSGenerator {
     };
   }
 
-  /**
-   * Generates an ASS (Advanced SubStation Alpha) subtitle script with kinetic
-   * word highlighting and selectable typography style preset.
-   */
-  static generateKineticASS(words: WordTimestamp[], options: KineticASSOptions = {}): string {
-    const style = ASSGenerator.resolveStyle(options);
-    const maxWordDuration = options.maxWordDuration || ASS_DEFAULTS.maxWordDuration;
-    const gapThreshold = options.gapThreshold || ASS_DEFAULTS.gapThreshold;
-    const groupSize = options.wordsPerGroup || ASS_DEFAULTS.wordsPerGroup;
-
-    const header = `[Script Info]
+  static buildHeader(style: SubtitleStyleConfig): string {
+    return `[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
 PlayResY: 1920
@@ -207,6 +245,107 @@ Style: KineticTitle, ${style.fontName}, ${style.fontSize}, ${style.primaryColor}
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
+  }
+
+  /**
+   * Generates a clean, static, phrase/sentence-based subtitle script without
+   * rapid per-word karaoke highlighting — ideal for translated dialogue or long-form podcasts.
+   */
+  static generateStandardASS(words: WordTimestamp[], options: KineticASSOptions = {}): string {
+    const style = ASSGenerator.resolveStyle({ ...options, style: 'standard' });
+    const cleanWords = ASSGenerator.sanitizeWords(words);
+    if (cleanWords.length === 0) {
+      return `${ASSGenerator.buildHeader(style)}\n`;
+    }
+
+    const groups: WordTimestamp[][] = [];
+    let current: WordTimestamp[] = [];
+    let currentChars = 0;
+
+    for (let i = 0; i < cleanWords.length; i++) {
+      const w = cleanWords[i];
+      const prev = current[current.length - 1];
+
+      const isPause = prev && w.start - prev.end > 0.5;
+      const isTerminal = prev && /[.?!:]$/.test(prev.word);
+      const isCommaBreak = prev && /[,;]$/.test(prev.word) && currentChars >= 30;
+      const isTooLong = currentChars + w.word.length > 56;
+
+      if (current.length > 0 && (isPause || isTerminal || isCommaBreak || isTooLong)) {
+        groups.push(current);
+        current = [];
+        currentChars = 0;
+      }
+
+      current.push(w);
+      currentChars += w.word.length + 1;
+    }
+    if (current.length > 0) {
+      groups.push(current);
+    }
+
+    const lines: string[] = [];
+    for (const group of groups) {
+      const startTime = group[0].start;
+      let endTime = group[group.length - 1].end;
+      if (endTime <= startTime) {
+        endTime = startTime + 1.5;
+      } else if (endTime - startTime < 1.0) {
+        endTime = startTime + 1.0;
+      }
+
+      const wordsText = group.map((w) => w.word.trim().replace(/[{}]/g, ''));
+      let text = wordsText.join(' ');
+      if (style.uppercase) {
+        text = text.toUpperCase();
+      }
+
+      if (text.length > 28 && wordsText.length >= 3) {
+        // Find best word split that balances the two lines evenly
+        let bestDiff = Number.POSITIVE_INFINITY;
+        let splitIdx = Math.floor(wordsText.length / 2);
+
+        for (let k = 1; k < wordsText.length; k++) {
+          const l1 = wordsText.slice(0, k).join(' ').length;
+          const l2 = wordsText.slice(k).join(' ').length;
+          const diff = Math.abs(l1 - l2);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            splitIdx = k;
+          }
+        }
+
+        const line1 = wordsText.slice(0, splitIdx).join(' ');
+        const line2 = wordsText.slice(splitIdx).join(' ');
+        text = style.uppercase
+          ? `${line1.toUpperCase()}\\N${line2.toUpperCase()}`
+          : `${line1}\\N${line2}`;
+      }
+
+      lines.push(
+        `Dialogue: 0,${ASSGenerator.formatTime(startTime)},${ASSGenerator.formatTime(endTime)},KineticTitle,,0,0,0,,${text}`
+      );
+    }
+
+    return `${ASSGenerator.buildHeader(style) + lines.join('\n')}\n`;
+  }
+
+  /**
+   * Generates an ASS (Advanced SubStation Alpha) subtitle script with kinetic
+   * word highlighting and selectable typography style preset.
+   */
+  static generateKineticASS(words: WordTimestamp[], options: KineticASSOptions = {}): string {
+    const presetKey = (options.style || 'default').toLowerCase();
+    if (presetKey === 'standard') {
+      return ASSGenerator.generateStandardASS(words, options);
+    }
+
+    const style = ASSGenerator.resolveStyle(options);
+    const maxWordDuration = options.maxWordDuration || ASS_DEFAULTS.maxWordDuration;
+    const gapThreshold = options.gapThreshold || ASS_DEFAULTS.gapThreshold;
+    const groupSize = options.wordsPerGroup || ASS_DEFAULTS.wordsPerGroup;
+
+    const header = ASSGenerator.buildHeader(style);
 
     const cleanWords = ASSGenerator.sanitizeWords(words);
     const lines: string[] = [];

@@ -11,6 +11,7 @@ export interface DownloadCommandOptions {
   output?: string;
   dir?: string;
   force?: boolean;
+  jsRuntimes?: string;
 }
 
 export async function downloadCommand(url: string, options: DownloadCommandOptions = {}) {
@@ -37,7 +38,8 @@ export async function downloadCommand(url: string, options: DownloadCommandOptio
     outputDir: options.dir ? resolve(options.dir) : config.downloadDir,
     outputFileName: options.output,
     force: options.force,
-    section
+    section,
+    jsRuntimes: options.jsRuntimes
   });
 
   logger.success(`Downloaded to: ${downloadedPath}`);

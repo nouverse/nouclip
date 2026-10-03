@@ -15,6 +15,7 @@ export interface DownloadOptions {
   outputFileName?: string;
   force?: boolean;
   section?: DownloadSection;
+  jsRuntimes?: string;
 }
 
 /** Minimum size before a cached file is trusted as a complete download. */
@@ -70,15 +71,24 @@ export class YouTubeDownloader {
 
   static buildDownloadArgs(
     url: string,
-    options: { outTemplate: string; ffmpegDir?: string; section?: DownloadSection }
+    options: {
+      outTemplate: string;
+      ffmpegDir?: string;
+      section?: DownloadSection;
+      jsRuntimes?: string;
+    }
   ): string[] {
     const args = [
       url,
       '-f',
-      'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+      'bestvideo[vcodec^=avc][ext=mp4]+bestaudio[ext=m4a]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best',
       '--merge-output-format',
       'mp4'
     ];
+
+    if (options.jsRuntimes) {
+      args.push('--js-runtimes', options.jsRuntimes);
+    }
 
     if (options.ffmpegDir) {
       args.push('--ffmpeg-location', options.ffmpegDir);
@@ -142,7 +152,8 @@ export class YouTubeDownloader {
     const args = YouTubeDownloader.buildDownloadArgs(url, {
       outTemplate,
       ffmpegDir: FFmpegRunner.getFFmpegDir(),
-      section: options.section
+      section: options.section,
+      jsRuntimes: options.jsRuntimes
     });
 
     logger.info('Downloading video via yt-dlp...');
