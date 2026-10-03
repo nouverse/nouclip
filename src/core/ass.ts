@@ -268,8 +268,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
       const isPause = prev && w.start - prev.end > 0.5;
       const isTerminal = prev && /[.?!:]$/.test(prev.word);
-      const isCommaBreak = prev && /[,;]$/.test(prev.word) && currentChars >= 25;
-      const isTooLong = currentChars + w.word.length > 42;
+      const isCommaBreak = prev && /[,;]$/.test(prev.word) && currentChars >= 30;
+      const isTooLong = currentChars + w.word.length > 56;
 
       if (current.length > 0 && (isPause || isTerminal || isCommaBreak || isTooLong)) {
         groups.push(current);
@@ -300,10 +300,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         text = text.toUpperCase();
       }
 
-      if (text.length > 32 && wordsText.length >= 3) {
-        const mid = Math.floor(wordsText.length / 2);
-        const line1 = wordsText.slice(0, mid).join(' ');
-        const line2 = wordsText.slice(mid).join(' ');
+      if (text.length > 28 && wordsText.length >= 3) {
+        // Find best word split that balances the two lines evenly
+        let bestDiff = Number.POSITIVE_INFINITY;
+        let splitIdx = Math.floor(wordsText.length / 2);
+
+        for (let k = 1; k < wordsText.length; k++) {
+          const l1 = wordsText.slice(0, k).join(' ').length;
+          const l2 = wordsText.slice(k).join(' ').length;
+          const diff = Math.abs(l1 - l2);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            splitIdx = k;
+          }
+        }
+
+        const line1 = wordsText.slice(0, splitIdx).join(' ');
+        const line2 = wordsText.slice(splitIdx).join(' ');
         text = style.uppercase
           ? `${line1.toUpperCase()}\\N${line2.toUpperCase()}`
           : `${line1}\\N${line2}`;
