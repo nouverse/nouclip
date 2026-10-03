@@ -12,7 +12,7 @@ export interface TranscriptSegment {
   words: WordTimestamp[];
 }
 
-export type SubtitleStylePreset = 'default' | 'hormozi' | 'storyteller' | 'cinematic';
+export type SubtitleStylePreset = 'default' | 'hormozi' | 'storyteller' | 'cinematic' | 'standard';
 
 export interface SubtitleStyleConfig {
   fontName: string;
@@ -95,6 +95,22 @@ export const SUBTITLE_STYLE_PRESETS: Record<SubtitleStylePreset, SubtitleStyleCo
     uppercase: true,
     scaleFactor: 110,
     marginV: 360
+  },
+  standard: {
+    fontName: 'Arial',
+    fontSize: 50,
+    primaryColor: '&H00FFFFFF',
+    highlightColor: '&H00FFFFFF', // No karaoke color shift; pure clear subtitle
+    outlineColor: '&H00000000',
+    backColor: '&H80000000',
+    bold: -1,
+    italic: 0,
+    outline: 4,
+    shadow: 2,
+    spacing: 1,
+    uppercase: false,
+    scaleFactor: 100,
+    marginV: 320
   }
 };
 
@@ -215,17 +231,8 @@ export class ASSGenerator {
     };
   }
 
-  /**
-   * Generates an ASS (Advanced SubStation Alpha) subtitle script with kinetic
-   * word highlighting and selectable typography style preset.
-   */
-  static generateKineticASS(words: WordTimestamp[], options: KineticASSOptions = {}): string {
-    const style = ASSGenerator.resolveStyle(options);
-    const maxWordDuration = options.maxWordDuration || ASS_DEFAULTS.maxWordDuration;
-    const gapThreshold = options.gapThreshold || ASS_DEFAULTS.gapThreshold;
-    const groupSize = options.wordsPerGroup || ASS_DEFAULTS.wordsPerGroup;
-
-    const header = `[Script Info]
+  static buildHeader(style: SubtitleStyleConfig): string {
+    return `[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
 PlayResY: 1920
@@ -238,6 +245,94 @@ Style: KineticTitle, ${style.fontName}, ${style.fontSize}, ${style.primaryColor}
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
+  }
+
+  /**
+   * Generates a clean, static, phrase/sentence-based subtitle script without
+   * rapid per-word karaoke highlighting — ideal for translated dialogue or long-form podcasts.
+   */
+  static generateStandardASS(words: WordTimestamp[], options: KineticASSOptions = {}): string {
+    const style = ASSGenerator.resolveStyle({ ...options, style: 'standard' });
+    const cleanWords = ASSGenerator.sanitizeWords(words);
+    if (cleanWords.length === 0) {
+      return `${ASSGenerator.buildHeader(style)}\n`;
+    }
+
+    const groups: WordTimestamp[][] = [];
+    let current: WordTimestamp[] = [];
+    let currentChars = 0;
+
+    for (let i = 0; i < cleanWords.length; i++) {
+      const w = cleanWords[i];
+      const prev = current[current.length - 1];
+
+      const isPause = prev && w.start - prev.end > 0.5;
+      const isTerminal = prev && /[.?!:]$/.test(prev.word);
+      const isCommaBreak = prev && /[,;]$/.test(prev.word) && currentChars >= 25;
+      const isTooLong = currentChars + w.word.length > 42;
+
+      if (current.length > 0 && (isPause || isTerminal || isCommaBreak || isTooLong)) {
+        groups.push(current);
+        current = [];
+        currentChars = 0;
+      }
+
+      current.push(w);
+      currentChars += w.word.length + 1;
+    }
+    if (current.length > 0) {
+      groups.push(current);
+    }
+
+    const lines: string[] = [];
+    for (const group of groups) {
+      const startTime = group[0].start;
+      let endTime = group[group.length - 1].end;
+      if (endTime <= startTime) {
+        endTime = startTime + 1.5;
+      } else if (endTime - startTime < 1.0) {
+        endTime = startTime + 1.0;
+      }
+
+      const wordsText = group.map((w) => w.word.trim().replace(/[{}]/g, ''));
+      let text = wordsText.join(' ');
+      if (style.uppercase) {
+        text = text.toUpperCase();
+      }
+
+      if (text.length > 32 && wordsText.length >= 3) {
+        const mid = Math.floor(wordsText.length / 2);
+        const line1 = wordsText.slice(0, mid).join(' ');
+        const line2 = wordsText.slice(mid).join(' ');
+        text = style.uppercase
+          ? `${line1.toUpperCase()}\\N${line2.toUpperCase()}`
+          : `${line1}\\N${line2}`;
+      }
+
+      lines.push(
+        `Dialogue: 0,${ASSGenerator.formatTime(startTime)},${ASSGenerator.formatTime(endTime)},KineticTitle,,0,0,0,,${text}`
+      );
+    }
+
+    return `${ASSGenerator.buildHeader(style) + lines.join('\n')}\n`;
+  }
+
+  /**
+   * Generates an ASS (Advanced SubStation Alpha) subtitle script with kinetic
+   * word highlighting and selectable typography style preset.
+   */
+  static generateKineticASS(words: WordTimestamp[], options: KineticASSOptions = {}): string {
+    const presetKey = (options.style || 'default').toLowerCase();
+    if (presetKey === 'standard') {
+      return ASSGenerator.generateStandardASS(words, options);
+    }
+
+    const style = ASSGenerator.resolveStyle(options);
+    const maxWordDuration = options.maxWordDuration || ASS_DEFAULTS.maxWordDuration;
+    const gapThreshold = options.gapThreshold || ASS_DEFAULTS.gapThreshold;
+    const groupSize = options.wordsPerGroup || ASS_DEFAULTS.wordsPerGroup;
+
+    const header = ASSGenerator.buildHeader(style);
 
     const cleanWords = ASSGenerator.sanitizeWords(words);
     const lines: string[] = [];

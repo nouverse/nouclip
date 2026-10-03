@@ -89,7 +89,7 @@ program
   )
   .option(
     '--style <preset>',
-    'Subtitle typography style preset: "default", "hormozi", "storyteller", "cinematic" (default: "default")',
+    'Subtitle typography style preset: "default", "hormozi", "storyteller", "cinematic", "standard" (default: "default")',
     'default'
   )
   .option('--font-size <size>', 'Subtitle font size (overrides the --style preset size)')
@@ -208,7 +208,7 @@ program
   .option('-t, --timestamps <json>', 'Path to Whisper word timestamps JSON (alias for --sub)')
   .option(
     '--style <preset>',
-    'Subtitle typography style preset: "default", "hormozi", "storyteller", "cinematic" (default: "default")',
+    'Subtitle typography style preset: "default", "hormozi", "storyteller", "cinematic", "standard" (default: "default")',
     'default'
   )
   .option('--font-size <size>', 'Font size (overrides the --style preset size)')

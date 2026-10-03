@@ -143,4 +143,13 @@ describe('ASSGenerator.generateKineticASS', () => {
     expect(ass).toContain('[Events]');
     expect(ass).not.toContain('Dialogue:');
   });
+
+  it('supports standard preset with clean sentence/phrase grouping without kinetic tags', () => {
+    const ass = ASSGenerator.generateKineticASS(words, { style: 'standard' });
+    expect(ass).toContain('[Script Info]');
+    expect(ass).toContain('Dialogue:');
+    expect(ass).toContain('Halo ini test');
+    expect(ass).not.toContain('\\fscx'); // No zoom animation tags
+    expect(ass).not.toContain('\\t('); // No transform tags
+  });
 });
