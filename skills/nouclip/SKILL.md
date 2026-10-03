@@ -200,6 +200,21 @@ When clipping foreign-language videos (e.g. English audio for an Indonesian audi
      ```
    The `standard` preset will automatically balance line lengths, split clauses at punctuation, and hold each phrase stationary for 2–3 seconds so viewers can easily read and comprehend.
 
+### 💡 Language Matching vs. Subtitle Style Rule (Agent Guidance)
+
+When deciding which `--style` to apply:
+
+- **Same Language (Audio matches subtitle language)**:
+  - *Examples:* English audio with English captions, or Indonesian audio with Indonesian captions.
+  - **Use Kinetic presets** (`default`, `hormozi`, `storyteller`, `cinematic`). Active per-word pop animations work effectively because the viewer's eyes and ears process the exact same spoken words synchronously.
+
+- **Cross-Language / Translated Subtitles (Audio differs from subtitle language)**:
+  - *Examples:* English audio with Indonesian translated subtitles.
+  - **Always recommend or default to `--style standard`**.
+  - **Why kinetic fails for translations:**
+    1. **Grammar & Word-Order Asynchrony:** Foreign language syntax rarely maps word-for-word. Highlighting translated words one-by-one creates a jarring rhythm conflict between the speaker's cadence and animated text.
+    2. **Cognitive Fatigue:** Viewers reading translations comprehend full clauses or conceptual thoughts. Static 2-line subtitles held steady for 2–3 seconds allow comfortable reading, whereas jumping kinetic words create visual distraction and unnecessary mental strain.
+
 ---
 
 ## ✂️ Silence & Pause Trimming (`--silence-trim`)
