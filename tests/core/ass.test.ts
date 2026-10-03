@@ -149,6 +149,7 @@ describe('ASSGenerator.generateKineticASS', () => {
     expect(ass).toContain('[Script Info]');
     expect(ass).toContain('Dialogue:');
     expect(ass).toContain('Halo ini test');
+    expect(ass).toContain('&H0000FFFF'); // Cinema Yellow
     expect(ass).not.toContain('\\fscx'); // No zoom animation tags
     expect(ass).not.toContain('\\t('); // No transform tags
   });

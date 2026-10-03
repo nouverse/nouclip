@@ -99,9 +99,9 @@ export const SUBTITLE_STYLE_PRESETS: Record<SubtitleStylePreset, SubtitleStyleCo
   standard: {
     fontName: 'Arial',
     fontSize: 50,
-    primaryColor: '&H00FFFFFF',
-    highlightColor: '&H00FFFFFF', // No karaoke color shift; pure clear subtitle
-    outlineColor: '&H00000000',
+    primaryColor: '&H0000FFFF', // Cinema Yellow
+    highlightColor: '&H0000FFFF', // Uniform Yellow
+    outlineColor: '&H00000000', // Black stroke
     backColor: '&H80000000',
     bold: -1,
     italic: 0,
