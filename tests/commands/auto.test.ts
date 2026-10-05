@@ -39,6 +39,22 @@ describe('auto command: resolveSource', () => {
     downloadSpy.mockRestore();
   });
 
+  it('forwards force flag to YouTubeDownloader', async () => {
+    const downloadSpy = spyOn(YouTubeDownloader, 'download').mockResolvedValue(
+      '/path/to/downloaded_forced.mp4'
+    );
+
+    const selection: TimeSelection = { start: 0, duration: 0, hasSelection: false };
+    await resolveSource('https://www.youtube.com/watch?v=dQw4w9WgXcQ', { force: true }, selection);
+
+    expect(downloadSpy).toHaveBeenCalledWith('https://www.youtube.com/watch?v=dQw4w9WgXcQ', {
+      outputDir: expect.any(String),
+      force: true
+    });
+
+    downloadSpy.mockRestore();
+  });
+
   it('downloads full video for YouTube URL when no selection is present', async () => {
     const downloadSpy = spyOn(YouTubeDownloader, 'download').mockResolvedValue(
       '/path/to/downloaded_full.mp4'

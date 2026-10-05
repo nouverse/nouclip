@@ -70,7 +70,14 @@ describe('nouclip CLI', () => {
     expect(code).toBe(0);
     // These reach ASSGenerator through autoCommand; leaving them unregistered
     // made the code path unreachable from the CLI.
-    for (const flag of ['--style', '--font-size', '--primary-color', '--highlight-color']) {
+    for (const flag of [
+      '--style',
+      '--font-size',
+      '--primary-color',
+      '--highlight-color',
+      '--no-scale',
+      '--force'
+    ]) {
       expect(stdout).toContain(flag);
     }
   });

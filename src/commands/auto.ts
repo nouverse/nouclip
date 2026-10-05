@@ -51,6 +51,8 @@ export interface AutoCommandOptions extends TimeSelectionOptions {
   outputDir?: string;
   keepTemp?: boolean;
   jsRuntimes?: string;
+  force?: boolean;
+  scale?: boolean;
   /** `auto` (default), `only` or `off` — see `CaptionsMode`. */
   captions?: string;
 }
@@ -236,7 +238,8 @@ export async function autoCommand(videoOrUrl: string, options: AutoCommandOption
     style: options.style || 'default',
     fontSize: parseFontSize(options.fontSize),
     primaryColor: options.primaryColor,
-    highlightColor: options.highlightColor
+    highlightColor: options.highlightColor,
+    noScale: options.scale === false
   });
   writeFileSync(assPath, assContent, 'utf-8');
   logger.success(`Subtitle script generated [style=${options.style || 'default'}]: ${assPath}`);
@@ -305,14 +308,16 @@ export async function resolveSource(
       const downloadedPath = await YouTubeDownloader.download(videoOrUrl, {
         outputDir: outDir,
         section: { start, end },
-        jsRuntimes: options.jsRuntimes
+        jsRuntimes: options.jsRuntimes,
+        force: options.force
       });
       return { path: downloadedPath, isPreClipped: true };
     }
 
     const downloadedPath = await YouTubeDownloader.download(videoOrUrl, {
       outputDir: outDir,
-      jsRuntimes: options.jsRuntimes
+      jsRuntimes: options.jsRuntimes,
+      force: options.force
     });
     return { path: downloadedPath, isPreClipped: false };
   }
