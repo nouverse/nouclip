@@ -210,10 +210,23 @@ When deciding which `--style` to apply:
 
 - **Cross-Language / Translated Subtitles (Audio differs from subtitle language)**:
   - *Examples:* English audio with Indonesian translated subtitles.
-  - **Always recommend or default to `--style standard`**.
-  - **Why kinetic fails for translations:**
-    1. **Grammar & Word-Order Asynchrony:** Foreign language syntax rarely maps word-for-word. Highlighting translated words one-by-one creates a jarring rhythm conflict between the speaker's cadence and animated text.
-    2. **Cognitive Fatigue:** Viewers reading translations comprehend full clauses or conceptual thoughts. Static 2-line subtitles held steady for 2–3 seconds allow comfortable reading, whereas jumping kinetic words create visual distraction and unnecessary mental strain.
+  - **Recommended default:** `--style standard` (calm, static 2-line wraps held steady for 2–3s).
+  - **If Kinetic subtitles are explicitly requested for translated videos (Acoustic Anchor Protocol)**:
+    - **Never linearly interpolate:** Do not divide total sentence duration evenly across translated words. Grammatical word-order shifts and pauses will cause severe subtitle drift.
+    - **Acoustic Speech Burst Mapping:** Inspect Whisper/ASR word timestamps to find vocal pauses and silence gaps (`>0.3s`). Chunk the translated text into short phrases (3–6 words) matching each vocal cluster.
+    - **Punchline Intonation Locking:** Lock key translated emphasis words (e.g. "BERLAWANAN", "KEBALIKANNYA", "TIDAK ADA LAGI") to the exact millisecond when the speaker raises their pitch or delivers rhetorical punchlines.
+    - **Always enforce `--no-scale`:** Eliminate vertical line-height jitter so text remains rock solid.
+
+### 🛑 Eliminating Subtitle Jitter (`--no-scale`)
+
+- In libass (FFmpeg ASS subtitle engine), pop scaling (`\fscx\fscy`) recalculates the bounding box height per frame. On bottom/center-aligned multi-word lines, this causes the entire line to jump vertically (2–4px jitter) on every word transition.
+- **Solution:** Pass `--no-scale` (available on `nouclip auto` and `nouclip subtitle`). This locks font scaling strictly at 100% and uses pure color-transition highlighting (`#FFFF00` yellow active, `#FFFFFF` white inactive), keeping subtitles rock-solid and stable.
+
+---
+
+## ⚡ Cache Overwrite & Forced Processing (`--force`)
+- By default, `nouclip` caches YouTube downloads in `~/.nouclip/downloads/`.
+- Pass `--force` on `nouclip auto` or `nouclip download` to bypass the cache and force a fresh download and cut.
 
 ---
 

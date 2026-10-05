@@ -129,6 +129,8 @@ export interface KineticASSOptions {
   /** Silence longer than this ends the current caption group. */
   gapThreshold?: number;
   marginV?: number;
+  /** Disable pop scaling transform to eliminate vertical line-height jitter in libass. */
+  noScale?: boolean;
 }
 
 export const ASS_DEFAULTS = {
@@ -204,6 +206,7 @@ export class ASSGenerator {
       while (nextIdx < words.length && group.length < groupSize) {
         const prev = group[group.length - 1];
         if (words[nextIdx].start - prev.end > gapThreshold) break;
+        if (/[.?!:]$/.test(prev.word.trim())) break;
         group.push(words[nextIdx]);
         nextIdx++;
       }
@@ -369,7 +372,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           const formatted = style.uppercase ? raw.toUpperCase() : raw;
           if (idx === j) {
             const scale = style.scaleFactor;
-            return `{\\c${style.highlightColor}\\t(0,80,\\fscx${scale}\\fscy${scale})\\t(80,160,\\fscx100\\fscy100)}${formatted}{\\r}`;
+            if (scale > 100 && !options.noScale) {
+              return `{\\c${style.highlightColor}\\t(0,80,\\fscx${scale}\\fscy${scale})\\t(80,160,\\fscx100\\fscy100)}${formatted}{\\r}`;
+            }
+            return `{\\c${style.highlightColor}}${formatted}{\\r}`;
           }
           return `{\\c${style.primaryColor}}${formatted}{\\r}`;
         });

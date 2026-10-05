@@ -108,6 +108,10 @@ program
   .option('--bgm-volume <volume>', 'BGM audio volume factor (default: 0.10)', '0.10')
   .option('--no-ducking', 'Disable sidechain audio ducking (constant volume BGM mix)')
   .option(
+    '--no-scale',
+    'Disable kinetic pop scaling animation to eliminate vertical line-height jitter'
+  )
+  .option(
     '--draft',
     'Generate segment, audio, and subtitle files but pause before burning for review'
   )
@@ -115,6 +119,7 @@ program
   .option('-o, --output <path>', 'Output video path')
   .option('--download-dir <dir>', 'Custom directory to store downloaded videos')
   .option('--output-dir <dir>', 'Custom directory to store final videos')
+  .option('--force', 'Force re-download even if already cached')
   .option('--keep-temp', 'Keep intermediate wav/temp files')
   .option(
     '--js-runtimes <runtime>',
@@ -225,6 +230,10 @@ program
   .option('--bgm <path>', 'Background music track to mix with sidechain ducking')
   .option('--bgm-volume <volume>', 'BGM audio volume factor (default: 0.10)', '0.10')
   .option('--no-ducking', 'Disable sidechain audio ducking (constant volume BGM mix)')
+  .option(
+    '--no-scale',
+    'Disable kinetic pop scaling animation to eliminate vertical line-height jitter'
+  )
   .option('-o, --output <path>', 'Output MP4 path')
   .action(action(subtitleCommand));
 

@@ -66,6 +66,18 @@ describe('ASSGenerator.groupWords', () => {
     expect(ASSGenerator.groupWords(withPause, 2, 0.4)).toHaveLength(2);
   });
 
+  it('breaks a group early on terminal punctuation', () => {
+    const withPunctuation: WordTimestamp[] = [
+      { word: 'selesai.', start: 0, end: 0.4 },
+      { word: 'Lanjut', start: 0.5, end: 0.9 },
+      { word: 'lagi', start: 1.0, end: 1.4 }
+    ];
+    const groups = ASSGenerator.groupWords(withPunctuation, 3, 0.4);
+    expect(groups).toHaveLength(2);
+    expect(groups[0].map((w) => w.word)).toEqual(['selesai.']);
+    expect(groups[1].map((w) => w.word)).toEqual(['Lanjut', 'lagi']);
+  });
+
   it('consumes every word exactly once', () => {
     const many = Array.from({ length: 9 }, (_, i) => ({
       word: `w${i}`,
@@ -142,6 +154,14 @@ describe('ASSGenerator.generateKineticASS', () => {
     const ass = ASSGenerator.generateKineticASS([]);
     expect(ass).toContain('[Events]');
     expect(ass).not.toContain('Dialogue:');
+  });
+
+  it('supports noScale option to eliminate libass scale jitter while keeping kinetic color highlight', () => {
+    const ass = ASSGenerator.generateKineticASS(words, { noScale: true });
+    expect(ass).toContain('Dialogue:');
+    expect(ass).toContain('&H0000FFFF'); // Active highlight color
+    expect(ass).not.toContain('\\fscx'); // Zero scale distortion
+    expect(ass).not.toContain('\\t('); // Zero transform jitter
   });
 
   it('supports standard preset with clean sentence/phrase grouping without kinetic tags', () => {
