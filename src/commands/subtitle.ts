@@ -18,7 +18,6 @@ export interface SubtitleCommandOptions {
   bgmVolume?: string;
   ducking?: boolean;
   scale?: boolean;
-  noScale?: boolean;
   output?: string;
 }
 
@@ -71,7 +70,7 @@ export async function subtitleCommand(videoPath: string, options: SubtitleComman
       fontSize: parseFontSize(options.fontSize),
       primaryColor: options.primaryColor,
       highlightColor: options.highlightColor,
-      noScale: options.scale === false || options.noScale === true
+      noScale: options.scale === false
     });
 
     burnAssPath = join(config.transcriptDir, `${baseName}.kinetic.ass`);

@@ -53,7 +53,6 @@ export interface AutoCommandOptions extends TimeSelectionOptions {
   jsRuntimes?: string;
   force?: boolean;
   scale?: boolean;
-  noScale?: boolean;
   /** `auto` (default), `only` or `off` — see `CaptionsMode`. */
   captions?: string;
 }
@@ -240,7 +239,7 @@ export async function autoCommand(videoOrUrl: string, options: AutoCommandOption
     fontSize: parseFontSize(options.fontSize),
     primaryColor: options.primaryColor,
     highlightColor: options.highlightColor,
-    noScale: options.scale === false || options.noScale === true
+    noScale: options.scale === false
   });
   writeFileSync(assPath, assContent, 'utf-8');
   logger.success(`Subtitle script generated [style=${options.style || 'default'}]: ${assPath}`);

@@ -219,7 +219,7 @@ When deciding which `--style` to apply:
 
 ### 🛑 Eliminating Subtitle Jitter (`--no-scale`)
 
-- In libass (FFmpeg ASS subtitle engine), pop scaling (`\fscx\fscy`) recalculates the bounding box height per frame. On bottom/center-aligned multi-word lines, this causes the entire line to jump vertically (2–4px jitter) on every word transition.
+- In libass (FFmpeg ASS subtitle engine), pop scaling (`\fscx\fscy`) can cause noticeable vertical line jumping and stutter on bottom/center-aligned multi-word lines as word scales fluctuate during font transforms.
 - **Solution:** Pass `--no-scale` (available on `nouclip auto` and `nouclip subtitle`). This locks font scaling strictly at 100% and uses pure color-transition highlighting (`#FFFF00` yellow active, `#FFFFFF` white inactive), keeping subtitles rock-solid and stable.
 
 ---
