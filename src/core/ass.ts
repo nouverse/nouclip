@@ -206,7 +206,7 @@ export class ASSGenerator {
       while (nextIdx < words.length && group.length < groupSize) {
         const prev = group[group.length - 1];
         if (words[nextIdx].start - prev.end > gapThreshold) break;
-        if (/[.?!:]$/.test(prev.word.trim())) break;
+        if (/[.?!:]['"”’\)\]\}]?$/.test(prev.word.trim())) break;
         group.push(words[nextIdx]);
         nextIdx++;
       }

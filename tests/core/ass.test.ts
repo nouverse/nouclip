@@ -66,15 +66,15 @@ describe('ASSGenerator.groupWords', () => {
     expect(ASSGenerator.groupWords(withPause, 2, 0.4)).toHaveLength(2);
   });
 
-  it('breaks a group early on terminal punctuation', () => {
+  it('breaks a group early on terminal punctuation with trailing quotes or brackets', () => {
     const withPunctuation: WordTimestamp[] = [
-      { word: 'selesai.', start: 0, end: 0.4 },
+      { word: 'selesai."', start: 0, end: 0.4 },
       { word: 'Lanjut', start: 0.5, end: 0.9 },
       { word: 'lagi', start: 1.0, end: 1.4 }
     ];
     const groups = ASSGenerator.groupWords(withPunctuation, 3, 0.4);
     expect(groups).toHaveLength(2);
-    expect(groups[0].map((w) => w.word)).toEqual(['selesai.']);
+    expect(groups[0].map((w) => w.word)).toEqual(['selesai."']);
     expect(groups[1].map((w) => w.word)).toEqual(['Lanjut', 'lagi']);
   });
 
