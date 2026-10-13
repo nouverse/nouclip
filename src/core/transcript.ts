@@ -1,4 +1,5 @@
 import type { WordTimestamp } from '@/core/ass';
+import type { TimelineSegment } from '@/core/selection';
 import { formatCueTime } from '@/utils/time';
 
 export const TRANSCRIPT_FORMATS = ['txt', 'srt', 'vtt', 'json'] as const;
@@ -166,6 +167,74 @@ export function shiftWordTimestamps(
   }
 
   return shifted;
+}
+
+/** A remapped word is never shown for less than this, so a sliver left at a cut does not flicker. */
+export const MIN_REMAPPED_WORD_DURATION = 0.08;
+
+/**
+ * Re-times the words of a source transcript onto the clock of a clip spliced from `timeline`,
+ * so nothing has to be transcribed again.
+ *
+ * Segment `k` starts in the output at the summed length of the segments before it. A word that
+ * overlaps a segment lands there, clipped to the segment's edges; one outside every segment is
+ * dropped; one inside two segments (a hook replayed in context) is shown both times. Each word is
+ * tagged with the index of the segment it came from, so a caption never spans a cut.
+ */
+export function remapTimelineWordTimestamps(
+  words: WordTimestamp[],
+  timeline: TimelineSegment[]
+): WordTimestamp[] {
+  const result: WordTimestamp[] = [];
+  let accumulated = 0;
+
+  timeline.forEach((segment, index) => {
+    const length = segment.end - segment.start;
+    for (const word of words) {
+      if (!(word.end > segment.start && word.start < segment.end)) continue;
+
+      const relativeStart = Math.max(0, word.start - segment.start);
+      const relativeEnd = Math.min(length, word.end - segment.start);
+      result.push({
+        ...word,
+        start: Number((accumulated + relativeStart).toFixed(3)),
+        end: Number(
+          (accumulated + Math.max(relativeStart + MIN_REMAPPED_WORD_DURATION, relativeEnd)).toFixed(
+            3
+          )
+        ),
+        segment: index
+      });
+    }
+    accumulated += length;
+  });
+
+  // Already in order when the input is; the sort only guards a transcript that was not.
+  return result.sort((a, b) => a.start - b.start);
+}
+
+/**
+ * Tags words that are already on a spliced clip's clock — Whisper ran on the clip itself — with
+ * the segment each falls in, by its midpoint, so the caption grouper can end a caption at a cut.
+ */
+export function assignTimelineSegments(
+  words: WordTimestamp[],
+  timeline: TimelineSegment[]
+): WordTimestamp[] {
+  if (timeline.length < 2) return words;
+
+  const ends: number[] = [];
+  let at = 0;
+  for (const segment of timeline) {
+    at += segment.end - segment.start;
+    ends.push(at);
+  }
+
+  return words.map((word) => {
+    const midpoint = (word.start + word.end) / 2;
+    const index = ends.findIndex((end) => midpoint < end);
+    return { ...word, segment: index === -1 ? timeline.length - 1 : index };
+  });
 }
 
 export function toSrt(words: WordTimestamp[], wordsPerCue = 4): string {

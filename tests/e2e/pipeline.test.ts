@@ -118,6 +118,57 @@ describe.skipIf(!ffmpegAvailable)('ffmpeg pipeline', () => {
     expect(existsSync(out)).toBe(true);
   }, 120_000);
 
+  it('splices segments in timeline order into one clip of the summed length', async () => {
+    const out = join(dir, 'spliced.mp4');
+    // Hook from the end first, then the start, then the middle: 1.0 + 0.5 + 0.5 seconds.
+    await FFmpegRunner.spliceTimeline(source, out, [
+      { start: 2, end: 3 },
+      { start: 0, end: 0.5 },
+      { start: 1, end: 1.5 }
+    ]);
+
+    const meta = await FFmpegRunner.getMetadata(out);
+    expect(meta.width).toBe(640);
+    expect(meta.height).toBe(360);
+    expect(meta.hasAudio).toBe(true);
+    expect(meta.duration).toBeGreaterThan(1.8);
+    expect(meta.duration).toBeLessThan(2.2);
+  }, 120_000);
+
+  it('splices a source that has no audio track', async () => {
+    const silent = join(dir, 'silent.mp4');
+    await FFmpegRunner.exec(FFmpegRunner.getFFmpegPath(), [
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      'testsrc=size=320x180:rate=15:duration=3',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'ultrafast',
+      '-pix_fmt',
+      'yuv420p',
+      silent
+    ]);
+
+    const out = join(dir, 'spliced-silent.mp4');
+    await FFmpegRunner.spliceTimeline(
+      silent,
+      out,
+      [
+        { start: 2, end: 3 },
+        { start: 0, end: 1 }
+      ],
+      { hasAudio: false }
+    );
+
+    const meta = await FFmpegRunner.getMetadata(out);
+    expect(meta.hasAudio).toBe(false);
+    expect(meta.duration).toBeGreaterThan(1.8);
+    expect(meta.duration).toBeLessThan(2.2);
+  }, 120_000);
+
   it('reports a readable error for a corrupt input', async () => {
     const broken = join(dir, 'broken.mp4');
     writeFileSync(broken, 'this is not a video');

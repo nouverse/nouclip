@@ -71,8 +71,8 @@ We use Bun's built-in test runner. Tests live in `tests/`, mirroring the `src/` 
 ```
 tests/
 ├── utils/      # time parsing, error helpers, path resolution
-├── core/       # ass, ffmpeg, config/env, selection, transcript, highlights, llm, whisper, youtube, workspace
-├── commands/   # CLI flag semantics (negatable flags, framing, numeric options)
+├── core/       # ass, ffmpeg, config/env, selection, timeline, transcript, highlights, llm, whisper, youtube, workspace
+├── commands/   # CLI flag semantics (negatable flags, framing, numeric options), stitch with ffmpeg mocked
 ├── e2e/        # CLI smoke tests + real ffmpeg pipeline
 └── version.test.ts
 ```
@@ -145,13 +145,14 @@ nouclip/
 │   ├── commands/           # Modular CLI commands
 │   │   ├── auto.ts         # End-to-end automated clipping pipeline
 │   │   ├── crop.ts         # Aspect ratio reframing & padding filters
-│   │   ├── cut.ts          # Video trimming & fast stream copy
+│   │   ├── cut.ts          # Video trimming & fast stream copy, or timeline/skip splicing
 │   │   ├── download.ts     # YouTube yt-dlp downloader with caching
 │   │   ├── extract.ts      # Audio extraction & Whisper transcription
 │   │   ├── framing.ts      # Shared --mode/--blur/--center resolution
 │   │   ├── highlight.ts    # Heuristic & LLM virality moment finder
 │   │   ├── info.ts         # Workspace & service introspection
 │   │   ├── list.ts         # Asset cataloging (downloads, segments, transcripts)
+│   │   ├── stitch.ts       # Multi-range splicing + re-timing of existing word timestamps
 │   │   ├── subtitle.ts     # ASS subtitle burner
 │   │   └── transcript.ts   # Transcript exporter (TXT, SRT, VTT, JSON)
 │   ├── core/               # Core engine modules
@@ -161,8 +162,8 @@ nouclip/
 │   │   ├── ffmpeg.ts       # FFmpeg arg builders & process runner
 │   │   ├── highlights.ts   # Keyword & heuristic moment finders
 │   │   ├── llm.ts          # OpenAI-compatible LLM client
-│   │   ├── selection.ts    # Shared --range/--start/--end/--duration resolution
-│   │   ├── transcript.ts   # TXT/SRT/VTT renderers
+│   │   ├── selection.ts    # Shared --range/--start/--end/--duration and --timeline/--skip resolution
+│   │   ├── transcript.ts   # TXT/SRT/VTT renderers, silence-trim and timeline word re-timing
 │   │   ├── whisper.ts      # OpenAI-compatible Whisper STT client
 │   │   ├── workspace.ts    # Asset listing & directory statistics
 │   │   └── youtube.ts      # yt-dlp wrapper & cache manager

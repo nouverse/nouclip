@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { FFmpegRunner, isFramingMode } from '@/core/ffmpeg';
+import { FFmpegRunner, SPLICE_FADE_SECONDS, isFramingMode } from '@/core/ffmpeg';
 
 describe('FFmpegRunner.parseAspectRatio', () => {
   it('parses standard presets and their aliases', () => {
@@ -208,6 +208,101 @@ describe('FFmpegRunner.buildTrimSilenceArgs', () => {
     expect(filter).toContain('trim=start=0:end=4');
     expect(filter).toContain('trim=start=6:end=10');
     expect(filter).toContain('concat=n=2:v=1:a=1');
+  });
+});
+
+describe('FFmpegRunner.buildTimelineSpliceArgs', () => {
+  const timeline = [
+    { start: 90, end: 95 },
+    { start: 0, end: 6 },
+    { start: 14, end: 50 }
+  ];
+
+  it('seeks every segment as its own input, in timeline order, and concatenates them', () => {
+    const args = FFmpegRunner.buildTimelineSpliceArgs('in.mp4', 'out.mp4', timeline);
+
+    expect(args.slice(0, 19)).toEqual([
+      '-y',
+      '-ss',
+      '90',
+      '-t',
+      '5',
+      '-i',
+      'in.mp4',
+      '-ss',
+      '0',
+      '-t',
+      '6',
+      '-i',
+      'in.mp4',
+      '-ss',
+      '14',
+      '-t',
+      '36',
+      '-i',
+      'in.mp4'
+    ]);
+
+    const filter = args[args.indexOf('-filter_complex') + 1];
+    expect(filter).toContain('[0:v]setpts=PTS-STARTPTS[v0]');
+    expect(filter).toContain('[2:v]setpts=PTS-STARTPTS[v2]');
+    expect(filter).toContain('[v0][a0][v1][a1][v2][a2]concat=n=3:v=1:a=1[v][a]');
+    expect(args).toContain('[v]');
+    expect(args).toContain('[a]');
+    expect(args).toContain('libx264');
+    expect(args).toContain('aac');
+    expect(args[args.length - 1]).toBe('out.mp4');
+  });
+
+  it('micro-fades the audio on both sides of every junction, and only there', () => {
+    const args = FFmpegRunner.buildTimelineSpliceArgs('in.mp4', 'out.mp4', timeline);
+    const filter = args[args.indexOf('-filter_complex') + 1];
+    const fade = SPLICE_FADE_SECONDS;
+
+    // First segment: fades out into the junction, no fade-in at the clip start.
+    expect(filter).toContain(`[0:a]asetpts=PTS-STARTPTS,afade=t=out:st=${5 - fade}:d=${fade}[a0]`);
+    // Middle segment: both.
+    expect(filter).toContain(
+      `[1:a]asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fade},afade=t=out:st=${6 - fade}:d=${fade}[a1]`
+    );
+    // Last segment: fades in from the junction, no fade-out at the clip end.
+    expect(filter).toContain(`[2:a]asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fade}[a2]`);
+  });
+
+  it('can splice with no fades at all', () => {
+    const args = FFmpegRunner.buildTimelineSpliceArgs('in.mp4', 'out.mp4', timeline, { fade: 0 });
+    expect(args[args.indexOf('-filter_complex') + 1]).not.toContain('afade');
+  });
+
+  it('never starts a fade-out before the segment begins', () => {
+    const args = FFmpegRunner.buildTimelineSpliceArgs('in.mp4', 'out.mp4', [
+      { start: 0, end: 0.01 },
+      { start: 5, end: 6 }
+    ]);
+    expect(args[args.indexOf('-filter_complex') + 1]).toContain('afade=t=out:st=0:d=');
+  });
+
+  it('leaves audio out when the source has none', () => {
+    const args = FFmpegRunner.buildTimelineSpliceArgs('in.mp4', 'out.mp4', timeline, {
+      hasAudio: false
+    });
+    const filter = args[args.indexOf('-filter_complex') + 1];
+    expect(filter).not.toContain(':a]');
+    expect(filter).toContain('[v0][v1][v2]concat=n=3:v=1:a=0[v]');
+    expect(args).not.toContain('[a]');
+    expect(args).not.toContain('aac');
+  });
+
+  it('falls back to a plain re-encoding cut for a single segment', () => {
+    expect(
+      FFmpegRunner.buildTimelineSpliceArgs('in.mp4', 'out.mp4', [{ start: 10, end: 40 }])
+    ).toEqual(FFmpegRunner.buildCutArgs('in.mp4', 'out.mp4', 10, 30, true));
+  });
+
+  it('rejects an empty timeline', () => {
+    expect(() => FFmpegRunner.buildTimelineSpliceArgs('in.mp4', 'out.mp4', [])).toThrow(
+      /At least one segment/
+    );
   });
 });
 

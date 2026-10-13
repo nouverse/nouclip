@@ -89,6 +89,39 @@ describe('ASSGenerator.groupWords', () => {
   });
 });
 
+describe('ASSGenerator.groupWords at a splice', () => {
+  // Spliced words sit close together across a cut, so neither the gap nor the punctuation
+  // rule would break the caption there; the segment tag does.
+  const spliced: WordTimestamp[] = [
+    { word: 'hook', start: 0, end: 0.4, segment: 0 },
+    { word: 'line', start: 0.45, end: 0.9, segment: 0 },
+    { word: 'setup', start: 0.95, end: 1.3, segment: 1 },
+    { word: 'starts', start: 1.35, end: 1.8, segment: 1 }
+  ];
+
+  it('never lets a caption span two spliced segments', () => {
+    const groups = ASSGenerator.groupWords(spliced, 3, 0.4);
+    expect(groups.map((g) => g.map((w) => w.word))).toEqual([
+      ['hook', 'line'],
+      ['setup', 'starts']
+    ]);
+  });
+
+  it('groups untagged words as before', () => {
+    const untagged = spliced.map(({ segment: _segment, ...w }) => w);
+    expect(ASSGenerator.groupWords(untagged, 3, 0.4).map((g) => g.length)).toEqual([3, 1]);
+  });
+
+  it('ends a standard-style phrase at a splice too', () => {
+    const dialogues = ASSGenerator.generateKineticASS(spliced, { style: 'standard' })
+      .split('\n')
+      .filter((l) => l.startsWith('Dialogue:'));
+    expect(dialogues).toHaveLength(2);
+    expect(dialogues[0]).toContain('hook line');
+    expect(dialogues[1]).toContain('setup starts');
+  });
+});
+
 describe('ASSGenerator.generateKineticASS', () => {
   it('produces a valid script structure', () => {
     const ass = ASSGenerator.generateKineticASS(words, { fontSize: 64 });

@@ -7,6 +7,7 @@ import { extractCommand } from '@/commands/extract';
 import { highlightCommand } from '@/commands/highlight';
 import { infoCommand } from '@/commands/info';
 import { listCommand } from '@/commands/list';
+import { stitchCommand } from '@/commands/stitch';
 import { subtitleCommand } from '@/commands/subtitle';
 import { transcriptCommand } from '@/commands/transcript';
 import { getErrorMessage, getExitCode } from '@/utils/errors';
@@ -27,6 +28,25 @@ function action<A extends unknown[]>(handler: (...args: A) => unknown | Promise<
       process.exitCode = getExitCode(err);
     }
   };
+}
+
+/**
+ * `--timeline` / `--skip` and their aliases: several ranges spliced in the order written, and
+ * windows cut out of the selection. `auto`, `cut` and `stitch` take them on top of `--range`.
+ */
+function withTimelineOptions(command: Command): Command {
+  return command
+    .option(
+      '--timeline <segments>',
+      'Segments to splice, in this order e.g. "1:30-1:35 + 0:00-0:15 + 0:25-0:50"'
+    )
+    .option('--ranges <segments>', 'Alias for --timeline')
+    .option(
+      '--timeline-file <path>',
+      'JSON list of segments e.g. [{ "start": "01:30", "end": "01:35", "tag": "hook" }]'
+    )
+    .option('--skip <windows>', 'Windows to cut out of the selection e.g. "0:06-0:14, 1:10-1:20"')
+    .option('--exclude <windows>', 'Alias for --skip');
 }
 
 const program = new Command();
@@ -55,17 +75,19 @@ program
   .action(action(listCommand));
 
 // 2. End-to-End Pipeline
-program
+const auto = program
   .command('auto <videoOrUrl>')
   .description(
-    'End-to-end automated clipping: download -> cut range -> aspect reframing -> Whisper -> kinetic subtitles'
+    'End-to-end automated clipping: download -> cut range or splice timeline -> aspect reframing -> Whisper -> kinetic subtitles'
   )
   .option('-r, --range <range>', 'Time range e.g. "13:25-14:50", "01:20..02:15", "45-75"')
   .option('-s, --start <time>', 'Start timestamp e.g. "13:25", "01:13:25", "85s"')
   .option('--from <time>', 'Alias for --start')
   .option('-e, --end <time>', 'End timestamp e.g. "14:50", "01:15:00"')
   .option('--to <time>', 'Alias for --end')
-  .option('-d, --duration <time>', 'Duration e.g. "30s", "1m", "45"')
+  .option('-d, --duration <time>', 'Duration e.g. "30s", "1m", "45"');
+
+withTimelineOptions(auto)
   .option(
     '-a, --aspect <ratio>',
     'Aspect ratio e.g. "9:16", "1:1", "4:5", "16:9" (default: "9:16")',
@@ -142,18 +164,49 @@ program
   )
   .action(action(downloadCommand));
 
-program
+const cut = program
   .command('cut <video>')
-  .description('Cut video segment by timestamp range without re-encoding (or with re-encode)')
+  .description(
+    'Cut a video segment by timestamp range without re-encoding (or with re-encode), or splice several ranges'
+  )
   .option('-r, --range <range>', 'Time range e.g. "13:25-14:50", "80-110"')
   .option('-s, --start <time>', 'Start time e.g. "13:25", "85s"')
   .option('--from <time>', 'Alias for --start')
   .option('-e, --end <time>', 'End time e.g. "14:50"')
   .option('--to <time>', 'Alias for --end')
-  .option('-d, --duration <time>', 'Duration e.g. "30s", "45"')
+  .option('-d, --duration <time>', 'Duration e.g. "30s", "45"');
+
+withTimelineOptions(cut)
   .option('-o, --output <path>', 'Output MP4 path')
-  .option('--reencode', 'Re-encode video with libx264 (default: false fast copy)')
+  .option(
+    '--reencode',
+    'Re-encode video with libx264 (default: false fast copy; --timeline and --skip always re-encode)'
+  )
   .action(action(cutCommand));
+
+const stitch = program
+  .command('stitch <video>')
+  .description(
+    'Splice several ranges of one video into one clip, in the order given, and re-time its word timestamps to match'
+  )
+  .option('-r, --range <range>', 'Base range to cut --skip windows out of e.g. "0:00-1:30"')
+  .option('-s, --start <time>', 'Start of the base range e.g. "13:25", "85s"')
+  .option('--from <time>', 'Alias for --start')
+  .option('-e, --end <time>', 'End of the base range e.g. "14:50"')
+  .option('--to <time>', 'Alias for --end')
+  .option('-d, --duration <time>', 'Duration of the base range e.g. "30s", "45"');
+
+withTimelineOptions(stitch)
+  .option(
+    '--subtitles <json>',
+    'Word timestamps JSON of the source video (e.g. its .whisper.json) to re-time onto the stitched clip'
+  )
+  .option(
+    '--output-subtitles <json>',
+    'Where to write the re-timed JSON (default: <workspace>/transcripts/<output name>.whisper.json)'
+  )
+  .option('-o, --output <path>', 'Output MP4 path')
+  .action(action(stitchCommand));
 
 program
   .command('crop <video>')

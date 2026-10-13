@@ -1,7 +1,7 @@
 # RFC: Section-Aware YouTube Download & Coordinate Synchronization in NouClip Auto Pipeline
 
 - **Author:** Nero (@nero-ai) & Gading Nasution (@gadingnst)
-- **Status:** Proposed / Draft
+- **Status:** Implemented — shipped in v1.0.3 (PR #3, commit `59cab78`)
 - **Date:** 2026-10-01
 - **Target Release:** NouClip v1.1.0 / v1.0.3
 - **Target Modules:** `src/commands/auto.ts`, `src/core/youtube.ts`, `src/core/selection.ts`, `src/core/words.ts`

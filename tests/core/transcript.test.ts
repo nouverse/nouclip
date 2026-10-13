@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import type { WordTimestamp } from '@/core/ass';
 import {
+  MIN_REMAPPED_WORD_DURATION,
+  assignTimelineSegments,
   findSpeechIntervals,
   groupParagraphs,
   groupWords,
   isTranscriptFormat,
+  remapTimelineWordTimestamps,
   renderTranscript,
   shiftWordTimestamps,
   toPlainText,
@@ -88,6 +91,104 @@ describe('findSpeechIntervals & shiftWordTimestamps', () => {
     // Word start relative to 2nd interval (5.9) = 6.0 - 5.9 = 0.1s.
     // New start = 2.2 + 0.1 = 2.3s.
     expect(shifted[2].start).toBeCloseTo(2.3, 1);
+  });
+});
+
+describe('remapTimelineWordTimestamps', () => {
+  const seg = (start: number, end: number) => ({ start, end, duration: end - start });
+  // One word per second of a 100s source, each 0.8s long.
+  const source: WordTimestamp[] = Array.from({ length: 100 }, (_, i) => ({
+    word: `w${i}`,
+    start: i,
+    end: i + 0.8,
+    probability: 0.9
+  }));
+
+  it('lands each segment at the summed length of the ones before it, in timeline order', () => {
+    const remapped = remapTimelineWordTimestamps(source, [seg(90, 95), seg(0, 6), seg(14, 50)]);
+
+    expect(remapped.map((w) => w.word).slice(0, 7)).toEqual([
+      'w90',
+      'w91',
+      'w92',
+      'w93',
+      'w94',
+      'w0',
+      'w1'
+    ]);
+    // The hook (90-95) plays first, from zero.
+    expect(remapped[0]).toEqual({ word: 'w90', start: 0, end: 0.8, probability: 0.9, segment: 0 });
+    // The setup (0-6) follows after the hook's 5 seconds.
+    expect(remapped.find((w) => w.word === 'w0')).toMatchObject({ start: 5, end: 5.8, segment: 1 });
+    // The body (14-50) follows after 5 + 6 seconds.
+    expect(remapped.find((w) => w.word === 'w14')).toMatchObject({
+      start: 11,
+      end: 11.8,
+      segment: 2
+    });
+    expect(remapped.at(-1)).toMatchObject({ word: 'w49', start: 46, end: 46.8 });
+  });
+
+  it('drops words outside every segment and keeps the rest intact', () => {
+    const remapped = remapTimelineWordTimestamps(source, [seg(10, 13)]);
+    expect(remapped.map((w) => w.word)).toEqual(['w10', 'w11', 'w12']);
+    expect(remapped.every((w) => w.probability === 0.9)).toBe(true);
+  });
+
+  it('clips a word straddling a cut to the segment and keeps it readable', () => {
+    const straddling: WordTimestamp[] = [
+      { word: 'before', start: 9.5, end: 10.4 },
+      { word: 'after', start: 12.9, end: 13.6 },
+      { word: 'sliver', start: 12.99, end: 13.6 }
+    ];
+    const remapped = remapTimelineWordTimestamps(straddling, [seg(10, 13), seg(20, 21)]);
+
+    // Starts at the cut, ends where it ended.
+    expect(remapped[0]).toMatchObject({ word: 'before', start: 0, end: 0.4 });
+    // Ends at the cut.
+    expect(remapped[1]).toMatchObject({ word: 'after', start: 2.9, end: 3 });
+    // A 10ms overlap would flicker: it gets the minimum duration instead.
+    expect(remapped[2]).toMatchObject({ word: 'sliver', start: 2.99 });
+    expect(remapped[2].end).toBeCloseTo(2.99 + MIN_REMAPPED_WORD_DURATION, 3);
+  });
+
+  it('shows a word twice when two segments replay it', () => {
+    const remapped = remapTimelineWordTimestamps(source, [seg(50, 52), seg(49, 53)]);
+    expect(remapped.map((w) => w.word)).toEqual(['w50', 'w51', 'w49', 'w50', 'w51', 'w52']);
+    expect(remapped.map((w) => w.segment)).toEqual([0, 0, 1, 1, 1, 1]);
+  });
+
+  it('returns nothing for an empty timeline', () => {
+    expect(remapTimelineWordTimestamps(source, [])).toEqual([]);
+  });
+
+  it('orders by output time even when the source was unsorted', () => {
+    const shuffled = [source[3], source[1], source[2]];
+    expect(remapTimelineWordTimestamps(shuffled, [seg(0, 10)]).map((w) => w.word)).toEqual([
+      'w1',
+      'w2',
+      'w3'
+    ]);
+  });
+});
+
+describe('assignTimelineSegments', () => {
+  const seg = (start: number, end: number) => ({ start, end, duration: end - start });
+  const clipWords: WordTimestamp[] = [
+    { word: 'a', start: 0, end: 1 },
+    { word: 'b', start: 4.8, end: 5.3 }, // straddles the cut at 5s, mostly after it
+    { word: 'c', start: 7, end: 8 },
+    { word: 'd', start: 12, end: 13 } // past the last cut: belongs to the last segment
+  ];
+
+  it('tags clip-clock words by the segment their midpoint falls in', () => {
+    const tagged = assignTimelineSegments(clipWords, [seg(90, 95), seg(0, 6), seg(14, 16)]);
+    expect(tagged.map((w) => w.segment)).toEqual([0, 1, 1, 2]);
+    expect(tagged.map((w) => w.start)).toEqual(clipWords.map((w) => w.start));
+  });
+
+  it('leaves words alone when there is no cut', () => {
+    expect(assignTimelineSegments(clipWords, [seg(0, 20)])).toBe(clipWords);
   });
 });
 
