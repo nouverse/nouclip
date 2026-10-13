@@ -39,6 +39,15 @@ export interface MixBgmOptions {
   hasAudio?: boolean;
 }
 
+export interface SpliceOptions {
+  hasAudio?: boolean;
+  /** Seconds of fade-out and fade-in on either side of every junction; `0` disables. */
+  fade?: number;
+}
+
+/** Long enough to hide the click of a cut landing mid-waveform, too short to hear as a fade. */
+export const SPLICE_FADE_SECONDS = 0.03;
+
 /** Shared x264 output settings so every re-encoding path stays consistent. */
 const X264_OUTPUT = [
   '-c:v',
@@ -406,6 +415,79 @@ export class FFmpegRunner {
     ];
   }
 
+  /**
+   * Splices segments of one source into one clip, in the order given, in a single ffmpeg pass.
+   *
+   * Every segment is its own seeked input (`-ss`/`-t` before `-i`): ffmpeg jumps to the keyframe
+   * before the start and decodes from there, so a hook taken from deep in a two-hour podcast does
+   * not cost decoding the two hours in front of it the way `trim` filters would. The segments
+   * then meet in a `concat` filter, and a micro-fade on either side of every junction keeps a cut
+   * landing mid-waveform from clicking. Always re-encodes: a frame-accurate cut cannot be
+   * stream-copied.
+   */
+  static buildTimelineSpliceArgs(
+    inputPath: string,
+    outputPath: string,
+    segments: Array<{ start: number; end: number }>,
+    options: SpliceOptions = {}
+  ): string[] {
+    if (segments.length === 0) {
+      throw new Error('At least one segment is required for splicing');
+    }
+
+    const hasAudio = options.hasAudio !== false;
+    const fade = options.fade ?? SPLICE_FADE_SECONDS;
+
+    if (segments.length === 1) {
+      const { start, end } = segments[0];
+      return FFmpegRunner.buildCutArgs(inputPath, outputPath, start, end - start, true);
+    }
+
+    const args: string[] = ['-y'];
+    for (const segment of segments) {
+      args.push(
+        '-ss',
+        formatArgTime(segment.start),
+        '-t',
+        formatArgTime(segment.end - segment.start),
+        '-i',
+        inputPath
+      );
+    }
+
+    const filters: string[] = [];
+    const concatInputs: string[] = [];
+    const last = segments.length - 1;
+
+    segments.forEach((segment, idx) => {
+      filters.push(`[${idx}:v]setpts=PTS-STARTPTS[v${idx}]`);
+      concatInputs.push(`[v${idx}]`);
+      if (!hasAudio) return;
+
+      const chain = ['asetpts=PTS-STARTPTS'];
+      if (fade > 0) {
+        if (idx > 0) chain.push(`afade=t=in:st=0:d=${formatArgTime(fade)}`);
+        if (idx < last) {
+          const fadeOutAt = Math.max(0, segment.end - segment.start - fade);
+          chain.push(`afade=t=out:st=${formatArgTime(fadeOutAt)}:d=${formatArgTime(fade)}`);
+        }
+      }
+      filters.push(`[${idx}:a]${chain.join(',')}[a${idx}]`);
+      concatInputs.push(`[a${idx}]`);
+    });
+
+    filters.push(
+      `${concatInputs.join('')}concat=n=${segments.length}:v=1:a=${hasAudio ? 1 : 0}[v]${hasAudio ? '[a]' : ''}`
+    );
+
+    args.push('-filter_complex', filters.join(';'), '-map', '[v]');
+    if (hasAudio) args.push('-map', '[a]');
+    args.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '18', '-pix_fmt', 'yuv420p');
+    if (hasAudio) args.push('-c:a', 'aac', '-b:a', '192k');
+    args.push(outputPath);
+    return args;
+  }
+
   static buildProbeArgs(videoPath: string): string[] {
     return [
       '-v',
@@ -564,6 +646,18 @@ export class FFmpegRunner {
     await FFmpegRunner.run(
       FFmpegRunner.getFFmpegPath(),
       FFmpegRunner.buildTrimSilenceArgs(inputPath, outputPath, intervals, hasAudio)
+    );
+  }
+
+  static async spliceTimeline(
+    inputPath: string,
+    outputPath: string,
+    segments: Array<{ start: number; end: number }>,
+    options: SpliceOptions = {}
+  ): Promise<void> {
+    await FFmpegRunner.run(
+      FFmpegRunner.getFFmpegPath(),
+      FFmpegRunner.buildTimelineSpliceArgs(inputPath, outputPath, segments, options)
     );
   }
 

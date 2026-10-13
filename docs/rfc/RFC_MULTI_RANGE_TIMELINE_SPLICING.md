@@ -1,10 +1,10 @@
 # RFC: Multi-Range Timeline Splicing, Exclusion Windows, and Subtitle Coordinate Remapping in NouClip
 
 - **Author:** Nouva (@nouva-ai) & Gading Nasution (@gadingnst)
-- **Status:** Proposed / Draft
+- **Status:** Implemented — 2026-10-13 (unreleased on `main`)
 - **Date:** 2026-10-11
 - **Target Release:** NouClip v1.2.0
-- **Target Modules:** `src/core/selection.ts`, `src/core/ffmpeg.ts`, `src/core/transcript.ts`, `src/commands/auto.ts`, `src/commands/cut.ts`, `src/commands/stitch.ts`
+- **Target Modules:** `src/utils/time.ts`, `src/core/selection.ts`, `src/core/ffmpeg.ts`, `src/core/transcript.ts`, `src/core/ass.ts`, `src/core/words.ts`, `src/commands/auto.ts`, `src/commands/cut.ts`, `src/commands/stitch.ts`, `src/cli.ts`
 
 ---
 
@@ -273,3 +273,38 @@ nouclip stitch <inputVideo> \
 4. **Phase 4: High-Level Pipeline Integration**
    - Wire `--timeline` and `--skip` into `src/commands/auto.ts` and `src/commands/cut.ts`.
    - Update `SKILL.md` and CLI documentation with usage examples.
+
+---
+
+## 7. Implementation Notes (2026-10-13)
+
+Everything in sections 3.1–3.4 and the Phase 1–4 plan is in place; the points below are where the
+code differs from the draft, and why.
+
+1. **Seeked inputs instead of `trim` filters (3.2.1).** `FFmpegRunner.buildTimelineSpliceArgs`
+   gives every segment its own `-ss <start> -t <length> -i <source>` input and joins them with
+   the `concat` filter. A `trim` filter decodes the source from the beginning up to the segment,
+   so a hook taken from 1:30:00 of a podcast would cost decoding ninety minutes; an input seek
+   jumps to the keyframe before it. Still one ffmpeg pass, no intermediate files, frame-accurate
+   (verified at 56 dB PSNR against the source frames). The 30 ms `afade` runs on both sides of
+   every junction and nowhere else, as drawn in 3.2.2.
+2. **A caption never spans a cut.** `remapTimelineWordTimestamps` tags each word with the index of
+   the segment it came from (`WordTimestamp.segment`), and both subtitle groupers end a caption
+   where the next word carries a different index. The tag survives silence trimming and the JSON
+   round trip through `nouclip subtitle`. Whisper output on a spliced clip is tagged by time with
+   `assignTimelineSegments`.
+3. **A YouTube link downloads only the window spanning the segments** (earliest start to latest
+   end), using the section download from the section-aware RFC; the timeline is then resolved in
+   that section's clock (`TimelineMedia.offset`). Its captions are re-timed from the full track,
+   so a hook-first edit of a captioned video needs no transcription at all. Without captions,
+   Whisper simply hears the spliced clip.
+4. **Segments are clamped to the probed media length.** A segment running past the end is cut
+   short, one starting past it is an error — otherwise the remapped subtitles would drift by the
+   missing seconds for every later segment.
+5. **`--skip` on its own** applies to the whole file (its length is probed). Every segment in a
+   timeline or skip list must have an explicit end: a list has no default duration.
+6. **Single-range fallback (5.2)** holds: a plan with one segment and no skips takes the existing
+   `--range` path (section download, `cutVideo`, same file names). A plan that only *resolves* to
+   one segment (a range minus one skip) is still re-encoded through the splice path.
+7. **Manifest (3.1.3)** also accepts `duration` instead of `end`, and the list under a `segments`
+   key. Output names carry the segments: `_90s-95s+0s-6s+14s-50s` (past three, `+Nmore`).

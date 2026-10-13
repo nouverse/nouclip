@@ -1,11 +1,11 @@
 ---
 name: nouclip
-description: CLI video clipping, universal aspect reframing (9:16, 1:1, 4:5), YouTube captions before Whisper transcription, timed transcripts for summarizing a video or YouTube link, kinetic subtitle burning, typography presets, silence trimming, BGM ducking, dependency checks, installation and update workflows using NouClip CLI.
+description: CLI video clipping, hook-first multi-range timelines and skip windows (splice several ranges in any order, cut out bumpers, re-time subtitles without re-transcribing), universal aspect reframing (9:16, 1:1, 4:5), YouTube captions before Whisper transcription, timed transcripts for summarizing a video or YouTube link, kinetic subtitle burning, typography presets, silence trimming, BGM ducking, dependency checks, installation and update workflows using NouClip CLI.
 ---
 
 # NouClip — Agentic Video Clipper & Shorts Engine Skill
 
-Operational instructions and procedures for checking prerequisites, installing and updating nouclip, clipping videos, reframing aspect ratios, reading YouTube captions or transcribing with Whisper, getting timed transcripts to summarize a video, applying typography presets, trimming silence, mixing ducked BGM, and burning kinetic subtitles using the `nouclip` CLI.
+Operational instructions and procedures for checking prerequisites, installing and updating nouclip, clipping videos, splicing hook-first timelines and skipping bumpers, reframing aspect ratios, reading YouTube captions or transcribing with Whisper, getting timed transcripts to summarize a video, applying typography presets, trimming silence, mixing ducked BGM, and burning kinetic subtitles using the `nouclip` CLI.
 
 ---
 
@@ -70,7 +70,7 @@ pnpm add -g nouclip@latest         # installed with pnpm
 curl -fsSL https://raw.githubusercontent.com/nouverse/nouclip/main/install.sh | bash
 ```
 
-Update when a flag in this document is rejected as unknown (`error: unknown option`): the installed nouclip is older than these instructions — `--captions`, and YouTube links on `transcript` and `highlight`, are recent.
+Update when a flag in this document is rejected as unknown (`error: unknown option`): the installed nouclip is older than these instructions — `--timeline` / `--skip`, the `stitch` command, `--captions`, and YouTube links on `transcript` and `highlight`, are recent.
 
 ### 2. Check & Install System Dependencies (`ffmpeg` & `yt-dlp`)
 Check if installed:
@@ -162,7 +162,53 @@ NouClip accepts human, timestamp, and second ranges:
 - **Ranges:** `--range 13:25-14:50` or `--range 01:20..02:15` or `--range 45-75`
 - **Explicit From/To:** `--from 13:25 --to 14:50` (or `--start 13:25 --end 14:50`)
 - **Duration:** `--from 13:25 --duration 45s` (or `--start 805 --duration 45`)
+- **Several ranges, in play order:** `--timeline "1:30-1:35 + 0:00-0:15 + 0:25-0:50"` (separators `+`, `;` or `,`; every range needs an end)
+- **Windows to cut out:** `--skip "0:06-0:14, 1:10-1:20"` (alias `--exclude`), next to `--range` or `--timeline`
 - **Formats accepted:** `MM:SS` (`13:25`), `HH:MM:SS` (`01:13:25`), human units (`1h30m`, `13m25s`, `45s`), and raw seconds (`85.5`).
+
+---
+
+## 🧩 Hook-First Timelines & Skip Windows (`--timeline` / `--skip`)
+
+A short rarely plays in source order: the punchline goes first, then the setup, and the channel bumper or sponsor read in between is cut. `auto`, `cut` and `stitch` take these flags on top of `--range`:
+
+- `--timeline "<A> + <B> + <C>"` — the ranges to keep, **in the order they should play**. `1:30-1:35 + 0:00-0:15` plays the hook from 1:30 first. Alias: `--ranges`.
+- `--timeline-file tracks.json` — the same as JSON, for manifests you write yourself: `[{ "start": "01:30", "end": "01:35", "tag": "hook" }, { "start": "00:14", "end": "00:50", "tag": "main_body" }]` (`end` or `duration`; times in any accepted form; `tag` is only for the log).
+- `--skip "<X>, <Y>"` — windows to cut out of whatever was selected. `--range 0:00-1:30 --skip 0:06-0:14` keeps 0:00-0:06 and 0:14-1:30. Alone, it applies to the whole file. Alias: `--exclude`.
+
+**Find the segments first.** Timestamps come from the transcript, not from guessing: `nouclip transcript <url> --lang en -f txt` gives `[mm:ss -> mm:ss]` paragraphs; pick the hook (the punchline or the strongest claim), the setup, and the payoff from those times, and leave applause or a pause out with `--skip`.
+
+What happens, so you can explain it:
+- The segments are spliced in **one ffmpeg pass** with frame-accurate seeks and a 30 ms fade on either side of every junction (no click). The result is always re-encoded.
+- A **YouTube link downloads only the window spanning the segments** (earliest start to latest end), not the whole video. A hook from the last minute plus a setup from the first still spans nearly all of it — expect that download, it is cached for the next edit of the same video.
+- **Subtitles follow the new timeline without a second transcription**: YouTube captions are re-timed onto the spliced clip, words outside the segments are dropped, and a caption never spans a cut. When Whisper runs, it simply hears the spliced clip.
+- A timeline that resolves to one continuous range behaves exactly like `--range`. `--timeline` cannot be combined with `--range`/`--start`/`--end`/`--duration` — list every range in the timeline.
+- Output names carry the segments: `<name>_90s-95s+0s-6s+14s-50s_short.mp4`.
+
+```bash
+# Hook first, then setup, then the payoff — one command, draft for review
+nouclip auto "https://youtu.be/EXAMPLE_ID" --lang en \
+  --timeline "1:30-1:35 + 0:00-0:15 + 0:25-0:50" --style hormozi --draft
+
+# Keep the first 90 seconds minus the bumper
+nouclip auto podcast.mp4 --range 0:00-1:30 --skip 0:06-0:14 --draft
+```
+
+### `stitch`: the splice as a primitive
+
+When a clip was already transcribed (its `.whisper.json` exists) and only the edit changes, do not transcribe again — stitch and re-time:
+
+```bash
+nouclip stitch podcast.mp4 \
+  --timeline "1:30-1:35 + 0:00-0:15" \
+  --subtitles ~/.nouclip/transcripts/podcast.whisper.json \
+  -o stitched.mp4 \
+  --output-subtitles stitched.whisper.json
+
+nouclip subtitle stitched.mp4 --sub stitched.whisper.json --style standard -o final.mp4
+```
+
+The `--subtitles` JSON must be timed against the **source** video's clock (the one you are stitching). The re-timed JSON records the `timeline` it came from and tags every word with its segment, so `nouclip subtitle` ends a caption at every cut.
 
 ---
 
@@ -338,6 +384,11 @@ nouclip auto <videoOrUrl> [options]
   -s, --start, --from <t>   Start timestamp e.g. "13:25", "01:13:25", "85s"
   -e, --end, --to <t>       End timestamp e.g. "14:50", "01:15:00"
   -d, --duration <time>     Duration e.g. "30s", "1m", "45"
+  --timeline <segments>     Segments to splice, in this order e.g. "1:30-1:35 + 0:00-0:15 + 0:25-0:50"
+  --ranges <segments>       Alias for --timeline
+  --timeline-file <path>    JSON list of segments: [{ "start": "01:30", "end": "01:35", "tag": "hook" }]
+  --skip <windows>          Windows to cut out of the selection e.g. "0:06-0:14, 1:10-1:20"
+  --exclude <windows>       Alias for --skip
   -a, --aspect <ratio>      Target aspect: "9:16", "1:1", "4:5", "16:9", "4:3", custom "W:H" (default: "9:16")
   -m, --mode <mode>         Framing style: "blur", "center", "pad", "stretch" (default: "blur")
   --blur                    Shortcut for --mode blur (blurred background letterbox)
@@ -362,7 +413,8 @@ nouclip auto <videoOrUrl> [options]
   --keep-temp               Keep intermediate WAV and temporary files
 
 Default output: <workspace>/output/<name><range>_short.mp4
-                (or <name><range>_<aspect>_clean.mp4 with --no-subtitles)
+                (or <name><range>_<aspect>_clean.mp4 with --no-subtitles;
+                 a timeline writes <range> as its segments, e.g. _90s-95s+0s-6s+14s-50s)
 ```
 
 ### 4. `download` — YouTube Downloader & Caching
@@ -375,18 +427,38 @@ nouclip download <url> [options]
   --force                   Force re-download even if already cached
 ```
 
-### 5. `cut` — Fast Video Segment Clipping
+### 5. `cut` — Fast Video Segment Clipping & Splicing
 ```bash
 nouclip cut <video> [options]
   -r, --range <range>       Time range e.g. "13:25-14:50", "80-110"
   -s, --start, --from <t>   Start timestamp
   -e, --end, --to <t>       End timestamp
   -d, --duration <time>     Duration e.g. "30s", "45"
+  --timeline <segments>     Segments to splice, in this order e.g. "1:30-1:35 + 0:00-0:15" (alias: --ranges)
+  --timeline-file <path>    JSON list of segments
+  --skip <windows>          Windows to cut out e.g. "0:06-0:14, 1:10-1:20" (alias: --exclude)
   -o, --output <path>       Output MP4 path
-  --reencode                Re-encode video with libx264 (default: false fast stream copy)
+  --reencode                Re-encode video with libx264 (default: false fast stream copy;
+                            --timeline and --skip always re-encode, frame-accurately)
 ```
 
-### 6. `crop` / `reframe` — Aspect Ratio Converter
+### 6. `stitch` — Splice Segments & Re-time Existing Subtitles
+```bash
+nouclip stitch <video> [options]
+  --timeline <segments>     Segments to splice, in this order e.g. "1:30-1:35 + 0:00-0:15" (alias: --ranges)
+  --timeline-file <path>    JSON list of segments
+  --skip <windows>          Windows to cut out e.g. "0:06-0:14, 1:10-1:20" (alias: --exclude)
+  -r, --range <range>       Base range to cut --skip windows out of e.g. "0:00-1:30"
+  -s, --start, --from <t>   Start of the base range
+  -e, --end, --to <t>       End of the base range
+  -d, --duration <time>     Duration of the base range
+  --subtitles <json>        Word timestamps JSON of the source video (its .whisper.json) to re-time
+  --output-subtitles <json> Where to write the re-timed JSON
+                            (default: <workspace>/transcripts/<output name>.whisper.json)
+  -o, --output <path>       Output MP4 path (default: <workspace>/segments/<name>_stitched<segments>.mp4)
+```
+
+### 7. `crop` / `reframe` — Aspect Ratio Converter
 ```bash
 nouclip crop <video> [options]
   -a, --aspect <ratio>      Target aspect: "9:16", "1:1", "4:5", "16:9", "4:3", custom "W:H" (default: "9:16")
@@ -396,7 +468,7 @@ nouclip crop <video> [options]
   -o, --output <path>       Output MP4 path
 ```
 
-### 7. `extract` — Audio & Whisper Transcription
+### 8. `extract` — Audio & Whisper Transcription
 ```bash
 nouclip extract <video> [options]
   -r, --range <range>       Limit extraction to range e.g. "13:25-14:50"
@@ -409,7 +481,7 @@ nouclip extract <video> [options]
   -o, --output <path>       Output JSON (default: <workspace>/transcripts/<name><range>.whisper.json)
 ```
 
-### 8. `transcript` — Timed Transcript of a File, JSON, or YouTube Link
+### 9. `transcript` — Timed Transcript of a File, JSON, or YouTube Link
 ```bash
 nouclip transcript <videoOrJsonOrUrl> [options]
   -f, --format <format>     Export format: "txt", "srt", "vtt", "json" (default: "txt")
@@ -422,7 +494,7 @@ nouclip transcript <videoOrJsonOrUrl> [options]
   -o, --output <path>       Output file (default: <workspace>/transcripts/<name>_transcript.<format>)
 ```
 
-### 9. `subtitle` — Animated Subtitle Burner & Audio Mixing
+### 10. `subtitle` — Animated Subtitle Burner & Audio Mixing
 ```bash
 nouclip subtitle <video> [options]
   -s, --sub <path>          Path to .ass subtitle file or .json word timestamps
@@ -438,7 +510,7 @@ nouclip subtitle <video> [options]
   -o, --output <path>       Output MP4 path (default: <workspace>/output/<name>_subtitled.mp4)
 ```
 
-### 10. `highlight` — AI Moments Discovery (Optional LLM Heuristics)
+### 11. `highlight` — AI Moments Discovery (Optional LLM Heuristics)
 ```bash
 nouclip highlight <videoOrJsonOrUrl> [options]
   -l, --lang <lang>         Spoken language, for captions and Whisper (default: "id")

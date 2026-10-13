@@ -3,6 +3,11 @@ export interface WordTimestamp {
   start: number;
   end: number;
   probability?: number;
+  /**
+   * Index of the timeline segment the word was spliced from (`remapTimelineWordTimestamps`).
+   * Two words from different segments never share a caption: the picture cuts between them.
+   */
+  segment?: number;
 }
 
 export interface TranscriptSegment {
@@ -188,8 +193,9 @@ export class ASSGenerator {
   }
 
   /**
-   * Chunks words into caption groups of at most `groupSize`,
-   * breaking early when the silence before the next word exceeds `gapThreshold`.
+   * Chunks words into caption groups of at most `groupSize`, breaking early when the silence
+   * before the next word exceeds `gapThreshold`, at sentence-final punctuation, and where the
+   * next word comes from another spliced segment.
    */
   static groupWords(
     words: WordTimestamp[],
@@ -207,6 +213,7 @@ export class ASSGenerator {
         const prev = group[group.length - 1];
         if (words[nextIdx].start - prev.end > gapThreshold) break;
         if (/[.?!:]['"”’\)\]\}]?$/.test(prev.word.trim())) break;
+        if (words[nextIdx].segment !== prev.segment) break;
         group.push(words[nextIdx]);
         nextIdx++;
       }
@@ -273,8 +280,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       const isTerminal = prev && /[.?!:]$/.test(prev.word);
       const isCommaBreak = prev && /[,;]$/.test(prev.word) && currentChars >= 30;
       const isTooLong = currentChars + w.word.length > 56;
+      const isCut = prev && w.segment !== prev.segment;
 
-      if (current.length > 0 && (isPause || isTerminal || isCommaBreak || isTooLong)) {
+      if (current.length > 0 && (isPause || isTerminal || isCommaBreak || isTooLong || isCut)) {
         groups.push(current);
         current = [];
         currentChars = 0;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { VERSION } from '@/version';
@@ -59,9 +59,50 @@ describe('nouclip CLI', () => {
       'extract',
       'transcript',
       'subtitle',
-      'highlight'
+      'highlight',
+      'stitch'
     ]) {
       expect(stdout).toContain(cmd);
+    }
+  });
+
+  it('exposes the timeline flags on auto, cut and stitch', async () => {
+    for (const cmd of ['auto', 'cut', 'stitch']) {
+      const { code, stdout } = await runCli([cmd, '--help']);
+      expect(code).toBe(0);
+      for (const flag of ['--timeline', '--ranges', '--timeline-file', '--skip', '--exclude']) {
+        expect(stdout).toContain(flag);
+      }
+    }
+    const { stdout } = await runCli(['stitch', '--help']);
+    expect(stdout).toContain('--subtitles');
+    expect(stdout).toContain('--output-subtitles');
+  });
+
+  it('rejects a bad timeline before touching ffmpeg', async () => {
+    // The file has to exist: a missing input is reported first.
+    const dir = mkdtempSync(join(tmpdir(), 'nouclip-e2e-timeline-'));
+    try {
+      const video = join(dir, 'clip.mp4');
+      writeFileSync(video, 'not a video');
+
+      let res = await runCli(['cut', video, '--timeline', '0-5 + 10-15', '--range', '0-1']);
+      expect(res.code).toBe(1);
+      expect(res.stderr).toContain('cannot be combined');
+
+      res = await runCli(['stitch', video, '--timeline', '1:30 + 0-5']);
+      expect(res.code).toBe(1);
+      expect(res.stderr).toMatch(/Invalid --timeline.*has no end/);
+
+      res = await runCli(['stitch', video]);
+      expect(res.code).toBe(1);
+      expect(res.stderr).toContain('Nothing to stitch');
+
+      res = await runCli(['auto', video, '--range', '0-10', '--skip', 'bogus']);
+      expect(res.code).toBe(1);
+      expect(res.stderr).toContain('Invalid --skip');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 

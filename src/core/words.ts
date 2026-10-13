@@ -5,7 +5,8 @@ import type { WordTimestamp } from '@/core/ass';
 import { type CaptionResult, YouTubeCaptions } from '@/core/captions';
 import { config } from '@/core/config';
 import { FFmpegRunner } from '@/core/ffmpeg';
-import type { TimeSelection } from '@/core/selection';
+import type { TimeSelection, TimelineSegment } from '@/core/selection';
+import { remapTimelineWordTimestamps } from '@/core/transcript';
 import { WhisperClient } from '@/core/whisper';
 import { YouTubeDownloader } from '@/core/youtube';
 import { CliError, getErrorMessage } from '@/utils/errors';
@@ -70,6 +71,9 @@ export async function obtainWords(source: string, options: ObtainOptions): Promi
  * The words from a YouTube link's captions, for `selection` when given — or `null` when Whisper
  * should be asked instead. Throws only for `--captions only`, where there is no instead.
  *
+ * With a `timeline`, the words are re-timed onto the clip spliced from it instead: the captions
+ * cover the whole video, so a hook-first edit needs no transcription at all.
+ *
  * Split from `obtainWords` for `auto`, which has already downloaded and reframed the clip by the time
  * it needs words: its fallback is Whisper on that clip, not another download.
  */
@@ -77,7 +81,8 @@ export async function captionWords(
   source: string,
   lang: string,
   mode: CaptionsMode,
-  selection?: TimeSelection
+  selection?: TimeSelection,
+  timeline?: TimelineSegment[]
 ): Promise<ObtainedWords | null> {
   const range = selection?.hasSelection ? selection : undefined;
   if (!YouTubeDownloader.isYouTubeUrl(source)) {
@@ -91,11 +96,15 @@ export async function captionWords(
 
   const caption = await tryCaptions(source, lang, mode);
   if (caption) {
-    const words = range
-      ? YouTubeCaptions.slice(caption.words, range.start, range.duration)
-      : caption.words;
-    if (words.length > 0) return fromCaptions(caption, words, range);
-    logger.warn('The captions have no words in that range; transcribing it instead.');
+    const words = timeline
+      ? remapTimelineWordTimestamps(caption.words, timeline)
+      : range
+        ? YouTubeCaptions.slice(caption.words, range.start, range.duration)
+        : caption.words;
+    if (words.length > 0) return fromCaptions(caption, words, range, timeline);
+    logger.warn(
+      `The captions have no words in ${timeline ? 'those segments' : 'that range'}; transcribing instead.`
+    );
   }
   if (mode === 'only')
     throw new CliError(
@@ -122,7 +131,8 @@ async function tryCaptions(
 function fromCaptions(
   caption: CaptionResult,
   words: WordTimestamp[],
-  selection?: TimeSelection
+  selection?: TimeSelection,
+  timeline?: TimelineSegment[]
 ): ObtainedWords {
   logger.success(
     `Using YouTube captions (${caption.kind === 'uploaded' ? 'uploaded' : 'YouTube speech recognition'}, ` +
@@ -136,7 +146,11 @@ function fromCaptions(
   return {
     words,
     text: words.map((w) => w.word).join(' '),
-    duration: selection ? selection.duration : (caption.duration ?? words.at(-1)?.end ?? 0),
+    duration: timeline
+      ? Number(timeline.reduce((sum, s) => sum + (s.end - s.start), 0).toFixed(3))
+      : selection
+        ? selection.duration
+        : (caption.duration ?? words.at(-1)?.end ?? 0),
     via: 'captions',
     name: caption.name,
     caption

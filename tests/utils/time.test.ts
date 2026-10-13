@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'bun:test';
-import { formatCueTime, formatSecondsToTimestamp, parseRange, parseTimestamp } from '@/utils/time';
+import {
+  formatCueTime,
+  formatSecondsToTimestamp,
+  parseRange,
+  parseRangeList,
+  parseTimestamp,
+  splitRangeList
+} from '@/utils/time';
 
 describe('parseTimestamp', () => {
   it('parses plain seconds', () => {
@@ -82,6 +89,52 @@ describe('parseRange', () => {
 
   it('rejects an empty range', () => {
     expect(() => parseRange('  ')).toThrow(/Range is empty/);
+  });
+});
+
+describe('splitRangeList', () => {
+  it('splits on + and ;', () => {
+    expect(splitRangeList('1:30-1:35 + 0:00-0:15 + 0:25-0:50')).toEqual([
+      '1:30-1:35',
+      '0:00-0:15',
+      '0:25-0:50'
+    ]);
+    expect(splitRangeList('1:30-1:35; 0:00-0:15')).toEqual(['1:30-1:35', '0:00-0:15']);
+  });
+
+  it('splits on a comma only when every piece is a range by itself', () => {
+    expect(splitRangeList('0:06-0:14, 1:10-1:20')).toEqual(['0:06-0:14', '1:10-1:20']);
+    expect(splitRangeList('10 to 20, 30..40')).toEqual(['10 to 20', '30..40']);
+    // "60,90" is the start/end spelling parseRange already accepts.
+    expect(splitRangeList('60,90')).toEqual(['60,90']);
+    expect(splitRangeList('60,90 + 100,130')).toEqual(['60,90', '100,130']);
+  });
+
+  it('keeps a single range whole', () => {
+    expect(splitRangeList('  13:25-14:50 ')).toEqual(['13:25-14:50']);
+  });
+});
+
+describe('parseRangeList', () => {
+  it('parses every range in the order written', () => {
+    expect(parseRangeList('1:30-1:35 + 0:00-0:15')).toEqual([
+      { start: 90, end: 95, duration: 5, raw: '1:30-1:35' },
+      { start: 0, end: 15, duration: 15, raw: '0:00-0:15' }
+    ]);
+  });
+
+  it('reads one range the way parseRange does', () => {
+    expect(parseRangeList('60,90')).toEqual([{ start: 60, end: 90, duration: 30, raw: '60,90' }]);
+  });
+
+  it('requires an end on every range', () => {
+    expect(() => parseRangeList('1:30 + 0:00-0:15')).toThrow(/has no end/);
+  });
+
+  it('rejects an empty list and a bad range', () => {
+    expect(() => parseRangeList('  ')).toThrow(/empty/);
+    expect(() => parseRangeList('2:00-1:00 + 0-5')).toThrow(/must be after start/);
+    expect(() => parseRangeList('a-b')).toThrow(/Could not parse timestamp/);
   });
 });
 

@@ -21,6 +21,7 @@ Designed for automated workflows, AI agent harnesses, and power users who need d
 - 🤖 **Agentic-First & Context-Rich:** Built-in introspection commands (`nouclip info`, `nouclip list --json`) that allow AI agents and scripts to discover paths, inspect storage, and reuse existing artifacts.
 - 📦 **Zero-Waste Artifact Management:** Downloaded raw videos, audio WAVs, word-level Whisper transcripts (`.json`), and styled ASS subtitle files are preserved in dedicated folders rather than deleted silently.
 - ⏱️ **Human & Agent Timestamps:** Supports flexible range syntaxes like `--range 13:25-14:50`, `01:13:25`, `85s`, and `13m25s`.
+- 🧩 **Hook-First Timelines & Skip Windows (`--timeline` / `--skip`):** Splice several ranges in the order you list them (`--timeline "1:30-1:35 + 0:00-0:15 + 0:25-0:50"` plays the punchline first) and cut bumpers or dead air out of any selection (`--range 0:00-1:30 --skip 0:06-0:14`). One ffmpeg pass, frame-accurate seeks, a 30 ms anti-click fade at every junction, and the subtitles re-timed to the new clip without transcribing again. `nouclip stitch` exposes the same splice as a standalone primitive.
 - 📐 **Universal Aspect Reframing:** Converts videos to any aspect ratio (`9:16`, `1:1`, `4:5`, `16:9`, or custom `W:H`) with multiple framing modes (`blur`, `center`, `pad`, `stretch`).
 - 🎨 **Typography Presets (`--style`):** Instant subtitle styling presets:
   - `hormozi`: Bold all-caps (Arial Black, 70px), neon green active-word highlight (`&H0000FF00`), pop zoom scaling (118%), thick outline.
@@ -210,6 +211,29 @@ nouclip auto "https://youtu.be/EXAMPLE_ID" --range 13:25-14:10 --no-subtitles -o
 nouclip auto interview.mp4 --range 01:20-02:00 --aspect 1:1 --mode pad -o out/feed.mp4
 ```
 
+#### Hook-first timelines and skip windows
+
+Retention is decided in the first seconds, so a short rarely plays in source order. `--timeline`
+lists the ranges to keep **in the order they should play**; `--skip` cuts windows (an intro bumper,
+a sponsor read) out of whatever was selected. Both work on local files and YouTube links — a link
+downloads only the window spanning the segments — and the subtitles follow the new timeline
+without a second transcription pass.
+
+```bash
+# Punchline first (1:30-1:35), then the setup (0:00-0:15), then the explanation (0:25-0:50)
+nouclip auto "https://youtu.be/EXAMPLE_ID" --timeline "1:30-1:35 + 0:00-0:15 + 0:25-0:50"
+
+# Keep 0:00-1:30 but cut the channel bumper at 0:06-0:14 out of it
+nouclip auto podcast.mp4 --range 0:00-1:30 --skip 0:06-0:14
+
+# Several windows, and a manifest written by an agent instead of a flag
+nouclip auto podcast.mp4 --range 0:00-2:00 --skip "0:06-0:14, 1:10-1:20"
+nouclip auto podcast.mp4 --timeline-file tracks.json   # [{ "start": "01:30", "end": "01:35", "tag": "hook" }, ...]
+```
+
+Segments are separated by `+`, `;` or `,`; every one needs an explicit end. A timeline that
+resolves to a single range behaves exactly like `--range`.
+
 ---
 
 ### 3. Review & Staged Workflow (Draft Mode)
@@ -240,6 +264,23 @@ nouclip subtitle ~/.nouclip/segments/video_framed_9x16_blur.mp4 \
 #### Cut Video Segment
 ```bash
 nouclip cut input.mp4 --range 13:25-14:10
+
+# Several ranges in one pass, or a range minus skip windows (always re-encoded, frame-accurate)
+nouclip cut input.mp4 --timeline "1:30-1:35 + 0:00-0:15"
+nouclip cut input.mp4 --range 0:00-2:00 --skip "0:06-0:14, 1:10-1:20"
+```
+
+#### Stitch Segments & Re-time Existing Subtitles
+```bash
+# Splice segments in the order given, and re-time the source's word timestamps onto the result
+nouclip stitch input.mp4 \
+  --timeline "1:30-1:35 + 0:00-0:15" \
+  --subtitles input.whisper.json \
+  -o stitched.mp4 \
+  --output-subtitles stitched.whisper.json
+
+# Then burn them — the re-timed words already know where every cut is
+nouclip subtitle stitched.mp4 --sub stitched.whisper.json --style hormozi -o final.mp4
 ```
 
 #### Reframe Aspect Ratio & Mode

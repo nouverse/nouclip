@@ -7,12 +7,25 @@ import { ASSGenerator, type WordTimestamp } from '@/core/ass';
 import { config } from '@/core/config';
 import { FFmpegRunner } from '@/core/ffmpeg';
 import {
+  NO_SELECTION,
   type TimeSelection,
-  type TimeSelectionOptions,
-  resolveTimeSelection,
-  selectionSuffix
+  type TimelineOptions,
+  type TimelineSegment,
+  describeTimeline,
+  isSplicePlan,
+  parseTimelinePlan,
+  planBounds,
+  planSelection,
+  resolveTimeline,
+  selectionSuffix,
+  shiftSegments,
+  timelineSuffix
 } from '@/core/selection';
-import { findSpeechIntervals, shiftWordTimestamps } from '@/core/transcript';
+import {
+  assignTimelineSegments,
+  findSpeechIntervals,
+  shiftWordTimestamps
+} from '@/core/transcript';
 import { WhisperClient } from '@/core/whisper';
 import { captionWords, parseCaptionsMode } from '@/core/words';
 import { YouTubeDownloader } from '@/core/youtube';
@@ -26,7 +39,7 @@ import { formatSecondsToTimestamp } from '@/utils/time';
  * is read from its positive key. `subtitles`/`subs`/`subtitle` and
  * `burn`/`draft` are aliases of the same two decisions.
  */
-export interface AutoCommandOptions extends TimeSelectionOptions {
+export interface AutoCommandOptions extends TimelineOptions {
   aspect?: string;
   mode?: string;
   blur?: boolean;
@@ -77,22 +90,49 @@ export async function autoCommand(videoOrUrl: string, options: AutoCommandOption
 
   logger.banner();
 
-  // 1. Resolve selection and subtitles preference FIRST.
-  const selection = resolveTimeSelection(options);
+  // 1. What to keep — one range, or a timeline of segments and skip windows — and the subtitles
+  //    preference, before anything is downloaded.
+  const plan = parseTimelinePlan(options);
+  const splicing = isSplicePlan(plan);
+  const selection = splicing ? NO_SELECTION : planSelection(plan);
   const skipSubtitles = shouldSkipSubtitles(options);
 
-  // 2. Download if URL (section-aware), otherwise resolve the local input.
-  const resolved = await resolveSource(videoOrUrl, options, selection);
+  // 2. Download if URL (section-aware), otherwise resolve the local input. A timeline downloads
+  //    only the window spanning its segments, and the splice then reads inside that section.
+  const bounds = splicing ? planBounds(plan) : selection;
+  const resolved = await resolveSource(videoOrUrl, options, bounds);
   const input = resolved.path;
   const baseName = basename(input, extname(input));
 
-  const needsCutting = selection.hasSelection && !resolved.isPreClipped;
-  const totalSteps = (needsCutting ? 1 : 0) + (skipSubtitles ? 1 : 3) + (options.bgm ? 1 : 0);
+  const needsCutting = !splicing && selection.hasSelection && !resolved.isPreClipped;
+  const totalSteps =
+    (needsCutting || splicing ? 1 : 0) + (skipSubtitles ? 1 : 3) + (options.bgm ? 1 : 0);
   let currentStep = 1;
 
-  // 3. Cut the requested segment (skipped if already downloaded as a section).
+  // 3. Splice the timeline, or cut the requested segment (skipped if already downloaded as a section).
   let workingVideo = input;
-  if (needsCutting) {
+  /** The spliced segments in the source video's own clock, for its captions and file names. */
+  let timeline: TimelineSegment[] | undefined;
+  if (splicing) {
+    const meta = await FFmpegRunner.getMetadata(input);
+    const offset = resolved.isPreClipped ? bounds.start : 0;
+    const resolvedTimeline = resolveTimeline(plan, { duration: meta.duration, offset });
+    timeline = shiftSegments(resolvedTimeline.segments, offset);
+
+    logger.step(
+      currentStep++,
+      totalSteps,
+      `Splicing ${timeline.length} segment${timeline.length === 1 ? '' : 's'} (${resolvedTimeline.totalDuration.toFixed(1)}s)...`
+    );
+    for (const line of describeTimeline(timeline)) logger.info(`  ${line}`);
+
+    const spliceOut = join(config.segmentDir, `${baseName}_spliced${timelineSuffix(timeline)}.mp4`);
+    await FFmpegRunner.spliceTimeline(input, spliceOut, resolvedTimeline.segments, {
+      hasAudio: meta.hasAudio
+    });
+    workingVideo = spliceOut;
+    logger.success(`Spliced to: ${spliceOut}`);
+  } else if (needsCutting) {
     const { start, duration } = selection;
     logger.step(
       currentStep++,
@@ -121,9 +161,11 @@ export async function autoCommand(videoOrUrl: string, options: AutoCommandOption
   await FFmpegRunner.reframe(workingVideo, framedOut, { aspect: aspectStr, mode: framingMode });
   logger.success(`Framed video ready: ${framedOut}`);
 
-  const transcriptBase = resolved.isPreClipped
-    ? baseName
-    : `${baseName}${selectionSuffix(selection)}`;
+  const transcriptBase = timeline
+    ? `${baseName}${timelineSuffix(timeline)}`
+    : resolved.isPreClipped
+      ? baseName
+      : `${baseName}${selectionSuffix(selection)}`;
   const finalDir = options.outputDir ? resolve(options.outputDir) : config.outputDir;
 
   // 4. Clean-video shortcut.
@@ -160,6 +202,7 @@ export async function autoCommand(videoOrUrl: string, options: AutoCommandOption
   }
 
   // 5. Word timestamps: the video's own YouTube captions when it has them, Whisper otherwise.
+  //    A spliced clip re-times the captions onto its own clock; Whisper simply hears the clip.
   logger.step(
     currentStep++,
     totalSteps,
@@ -173,7 +216,8 @@ export async function autoCommand(videoOrUrl: string, options: AutoCommandOption
     videoOrUrl,
     lang,
     parseCaptionsMode(options.captions),
-    selection
+    selection,
+    timeline
   );
   let whisperRes: { words: WordTimestamp[]; text: string };
   if (captioned) {
@@ -188,7 +232,8 @@ export async function autoCommand(videoOrUrl: string, options: AutoCommandOption
           words: captioned.words,
           source: 'youtube-captions',
           track: captioned.caption?.track,
-          timing: captioned.caption?.timing
+          timing: captioned.caption?.timing,
+          ...(timeline ? { timeline } : {})
         },
         null,
         2
@@ -206,6 +251,17 @@ export async function autoCommand(videoOrUrl: string, options: AutoCommandOption
       });
     } finally {
       if (!options.keepTemp) removeQuietly(tempWav);
+    }
+
+    if (timeline) {
+      // Whisper heard the spliced clip, so its times are right already; tagging each word with
+      // its segment keeps a caption from spanning a cut, in this run and in a draft review.
+      whisperRes = { ...whisperRes, words: assignTimelineSegments(whisperRes.words, timeline) };
+      writeFileSync(
+        transcriptJsonPath,
+        JSON.stringify({ ...whisperRes, timeline }, null, 2),
+        'utf-8'
+      );
     }
   }
 

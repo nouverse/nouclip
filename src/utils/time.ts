@@ -6,6 +6,7 @@
  * - HH:MM:SS: "01:13:25"
  * - Human units: "1h30m", "13m25s", "45s"
  * - Ranges: "13:25-14:50", "13:25..14:50", "13:25 to 14:50"
+ * - Range lists: "1:30-1:35 + 0:00-0:15", "0:06-0:14; 1:10-1:20", "0:06-0:14, 1:10-1:20"
  */
 
 export interface ParsedTimeRange {
@@ -114,6 +115,54 @@ export function parseRange(rangeStr: string, defaultDuration = 30): ParsedTimeRa
     duration,
     raw: rangeStr
   };
+}
+
+/** A piece that reads as `start-end` on its own, in any of the range spellings. */
+const RANGE_LIKE_RE = /\.\.| to |-/;
+
+/**
+ * Splits a range list into its ranges without parsing them.
+ *
+ * `+` and `;` always separate ranges. A `,` separates ranges only when every piece around it
+ * is a range by itself (`"1:30-1:35, 0:00-0:15"`); otherwise it is the start/end delimiter
+ * {@link parseRange} already accepts, so `"60,90"` stays one range from 60 to 90.
+ */
+export function splitRangeList(input: string): string[] {
+  const trimmed = input.trim();
+  const pieces = (separator: RegExp) =>
+    trimmed
+      .split(separator)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+  const everything = pieces(/[+;,]/);
+  if (everything.length > 1 && everything.every((piece) => RANGE_LIKE_RE.test(piece))) {
+    return everything;
+  }
+  if (/[+;]/.test(trimmed)) return pieces(/[+;]/);
+  return [trimmed];
+}
+
+/**
+ * Parses a list of ranges — a timeline of segments, or windows to skip — in the order written.
+ *
+ * Every range needs an explicit end: a list has no default duration to fall back on, and a
+ * bare `"1:30"` in a timeline is more likely a typo than a 30-second segment.
+ */
+export function parseRangeList(input: string): ParsedTimeRange[] {
+  if (typeof input !== 'string' || input.trim() === '') {
+    throw new Error('Range list is empty. Expected e.g. "1:30-1:35 + 0:00-0:15".');
+  }
+
+  return splitRangeList(input).map((piece) => {
+    const parsed = parseRange(piece);
+    if (parsed.end === undefined) {
+      throw new Error(
+        `Range "${piece}" has no end: write it as "start-end", e.g. "${piece}-1:35".`
+      );
+    }
+    return parsed;
+  });
 }
 
 export function formatSecondsToTimestamp(sec: number, includeHours = false): string {
