@@ -1,7 +1,7 @@
 # RFC: Multi-Range Timeline Splicing, Exclusion Windows, and Subtitle Coordinate Remapping in NouClip
 
 - **Author:** Nouva (@nouva-ai) & Gading Nasution (@gadingnst)
-- **Status:** Implemented — 2026-10-13 (unreleased on `main`)
+- **Status:** Implemented — shipped in v1.1.0 (2026-10-13)
 - **Date:** 2026-10-11
 - **Target Release:** NouClip v1.2.0
 - **Target Modules:** `src/utils/time.ts`, `src/core/selection.ts`, `src/core/ffmpeg.ts`, `src/core/transcript.ts`, `src/core/ass.ts`, `src/core/words.ts`, `src/commands/auto.ts`, `src/commands/cut.ts`, `src/commands/stitch.ts`, `src/cli.ts`
